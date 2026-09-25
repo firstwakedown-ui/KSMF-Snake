@@ -1,0 +1,56 @@
+# === Obecné ===
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+.env
+.env.local
+.idea/
+.vscode/
+*.swp
+
+# === Node / JavaScript (React Native, Expo, Ionic) ===
+node_modules/
+npm-debug.log*
+yarn-error.log*
+*.tsbuildinfo
+.expo/
+.expo-shared/
+dist/
+build/
+web-build/
+
+# === Android ===
+*.apk
+*.aab
+*.keystore
+*.jks
+.gradle/
+local.properties
+**/android/app/build/
+**/android/build/
+**/android/.cxx/
+
+# === iOS ===
+*.ipa
+*.xcuserstate
+ios/Pods/
+**/ios/build/
+DerivedData/
+
+# === Python (tools/osm) ===
+.venv/
+venv/
+__pycache__/
+*.pyc
+tools/osm/out/
+tools/osm/cache/
+
+# === Flutter / Dart ===
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+**/flutter/build/

@@ -1,0 +1,24 @@
+==========================================================
+ AchtungDieKM — jak se vrátit ke konverzaci s Claude Code
+==========================================================
+
+Tahle konverzace s Claudem se dá obnovit.
+
+Když příště otevřeš terminál VE SLOŽCE PROJEKTU:
+    D:\!!DATA\Achtung Die Kurve
+a spustíš příkaz `claude`, máš dvě možnosti:
+
+  • claude --continue   (nebo: claude -c)
+        -> plynule naváže na TUTO konverzaci
+
+  • claude --resume     (nebo: claude -r)
+        -> ukáže seznam předchozích konverzací, vybereš si
+
+Pozn.: I kdyby se konverzace neobnovila a začneš úplně novou,
+Claude má uloženou paměť o projektu (kdo jsi, stack, Supabase/Vercel,
+jak bezpečně spouštět migrace, deník s časy...) a hned navážete.
+
+Historie vývoje (jak hra vznikala) je navíc trvale v repu:
+    docs/00-denik-vyvoje.md   (deník, 20 etap s časy)
+a na GitHubu: https://github.com/firstwakedown-ui/AchtungDieKM
+==========================================================
