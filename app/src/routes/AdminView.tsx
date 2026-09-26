@@ -36,6 +36,7 @@ type Match = {
   snake_speed_mps: number
   strawberry_spawn_min_s: number
   strawberry_spawn_max_s: number
+  strawberry_active_percent: number
   max_lead_m: number
   respawn_countdown_s: number
 }
@@ -50,7 +51,7 @@ type Edge = { id: number; name: string | null; enabled: boolean; is_foot: boolea
 type Start = { id: string; label: string; coord: [number, number] }
 type MapPoint = { id: string; label: string; coord: [number, number] }
 
-const MATCH_COLS = 'id,name,area,is_active,ready,footpaths_enabled,idle_timeout_s,outside_timeout_s,snap_tolerance_m,walk_speed_mps,run_speed_mps,sprint_speed_mps,sprint_range_m,snake_initial_length_m,strawberry_growth_m,game_duration_s,snake_speed_mps,strawberry_spawn_min_s,strawberry_spawn_max_s,max_lead_m,respawn_countdown_s'
+const MATCH_COLS = 'id,name,area,is_active,ready,footpaths_enabled,idle_timeout_s,outside_timeout_s,snap_tolerance_m,walk_speed_mps,run_speed_mps,sprint_speed_mps,sprint_range_m,snake_initial_length_m,strawberry_growth_m,game_duration_s,snake_speed_mps,strawberry_spawn_min_s,strawberry_spawn_max_s,strawberry_active_percent,max_lead_m,respawn_countdown_s'
 
 const MODE_LABEL: Record<Mode, string> = {
   area: 'Oblast',
@@ -123,6 +124,7 @@ function AdminBoard() {
   const [snakeKmh, setSnakeKmh] = useState(3)
   const [berryMin, setBerryMin] = useState(10)
   const [berryMax, setBerryMax] = useState(60)
+  const [berryActivePercent, setBerryActivePercent] = useState(100)
   const [maxLead, setMaxLead] = useState(100)
   const [respawnSeconds, setRespawnSeconds] = useState(3)
 
@@ -302,6 +304,7 @@ function AdminBoard() {
     setSnakeKmh(Number(mt.snake_speed_mps) * 3.6)
     setBerryMin(mt.strawberry_spawn_min_s)
     setBerryMax(mt.strawberry_spawn_max_s)
+    setBerryActivePercent(mt.strawberry_active_percent ?? 100)
     setMaxLead(Number(mt.max_lead_m))
     setRespawnSeconds(mt.respawn_countdown_s)
     setFootEnabled(mt.footpaths_enabled)
@@ -843,6 +846,7 @@ function AdminBoard() {
       walk_speed_mps: walkMps, run_speed_mps: runMps, sprint_speed_mps: sprintMps, sprint_range_m: sprintRange,
       snake_initial_length_m: snakeLength, strawberry_growth_m: berryGrowth, game_duration_s: gameMinutes * 60,
       snake_speed_mps: snakeKmh / 3.6, strawberry_spawn_min_s: berryMin, strawberry_spawn_max_s: berryMax,
+      strawberry_active_percent: berryActivePercent,
       max_lead_m: maxLead, respawn_countdown_s: respawnSeconds,
     }
     const { error: err } = await supabase!.from('matches').update(patch).eq('id', mt.id)
@@ -965,6 +969,8 @@ function AdminBoard() {
               <div className="card-row"><label>Rychlost hada (km/h)</label><input type="number" min={0.5} step={0.1} value={snakeKmh} onChange={(e) => setSnakeKmh(+e.target.value)} /></div>
               <div className="card-row"><label>Jahůdka nejdříve (s)</label><input type="number" min={1} value={berryMin} onChange={(e) => setBerryMin(+e.target.value)} /></div>
               <div className="card-row"><label>Jahůdka nejpozději (s)</label><input type="number" min={berryMin} value={berryMax} onChange={(e) => setBerryMax(+e.target.value)} /></div>
+              <div className="card-row"><label>Maximum aktivních jahůdek (%)</label><input type="number" min={1} max={100} value={berryActivePercent} onChange={(e) => setBerryActivePercent(Math.max(1, Math.min(100, +e.target.value)))} /></div>
+              <p className="muted">Při {berriesRef.current.length} bodech může být současně aktivních nejvýše {Math.ceil(berriesRef.current.length * berryActivePercent / 100)}.</p>
               <div className="card-row"><label>Maximální náskok (m)</label><input type="number" min={5} value={maxLead} onChange={(e) => setMaxLead(+e.target.value)} /></div>
               <div className="card-row"><label>Respawn odpočet (s)</label><input type="number" min={0} value={respawnSeconds} onChange={(e) => setRespawnSeconds(+e.target.value)} /></div>
               <div className="card-row"><label>Nečinnost (s) <span className="tip" title="Po kolika sekundách bez pohybu hráč vypadne (stojí na místě). Default 30 s.">ⓘ</span></label><input type="number" min={5} value={idle} onChange={(e) => setIdle(+e.target.value)} /></div>
