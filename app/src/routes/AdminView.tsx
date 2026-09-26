@@ -778,6 +778,24 @@ function AdminBoard() {
     const { data: rp } = await supabase!.rpc('ready_plans')
     setReadyPlans((rp ?? []) as ReadyPlan[])
   }
+  const duplicatePlan = async () => {
+    const mt = matchRef.current
+    if (!mt) return
+    const name = window.prompt('Název kopie plánu:', `${mt.name ?? 'Plán'} – kopie`)
+    if (name == null) return
+    setBusy(true)
+    try {
+      const { data: newId, error: e } = await supabase!.rpc('duplicate_match_plan', { p_match: mt.id, p_name: name })
+      if (e) throw e
+      await loadPlans()
+      await loadPlanData(newId as string)
+      setStatus(`Plán zduplikován jako „${name.trim() || `${mt.name ?? 'Plán'} – kopie`}". Před použitím jej zkontroluj a označ „připravit ke hře".`)
+    } catch (e: any) {
+      setError(`Duplikování plánu: ${e.message ?? e}`)
+    } finally {
+      setBusy(false)
+    }
+  }
   useEffect(() => {
     if (section !== 'manage') return
     const timer = setInterval(loadGames, 1000)
@@ -879,6 +897,7 @@ function AdminBoard() {
             </select>
             <button className="pill mode" onClick={newPlan}>+ Plán</button>
             <button className="pill mode" onClick={renamePlan} disabled={!match}>Přejmenovat</button>
+            <button className="pill mode" onClick={duplicatePlan} disabled={!match || busy}>Duplikovat</button>
             <button className="pill mode" onClick={deletePlan} disabled={!match}>Smazat</button>
             <button className={`pill mode ${match?.ready ? 'active' : ''}`} onClick={() => toggleReady(!match?.ready)} disabled={!match}>{match?.ready ? '✓ ke hře' : 'připravit ke hře'}</button>
             {(Object.keys(MODE_LABEL) as Mode[]).map((m) => (
