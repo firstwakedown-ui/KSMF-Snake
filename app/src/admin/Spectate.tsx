@@ -19,6 +19,7 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
   const playersRef = useRef<Map<string, P>>(new Map())
   const markersRef = useRef<Map<string, maplibregl.Marker>>(new Map())
   const planMarkersRef = useRef<maplibregl.Marker[]>([])
+  const activeBerryMarkersRef = useRef<maplibregl.Marker[]>([])
   const colorRef = useRef<Map<string, string>>(new Map())
   const channelRef = useRef<ReturnType<NonNullable<typeof supabase>['channel']> | null>(null)
   const [roster, setRoster] = useState<RosterRow[]>([])
@@ -51,12 +52,14 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
       } else {
         setStatus('finished')
         setRemaining(null)
+        activeBerryMarkersRef.current.forEach((marker) => marker.remove())
+        activeBerryMarkersRef.current = []
       }
     }
     void refreshStatus()
     const statusPoll = setInterval(refreshStatus, 1000)
-    const worldPoll = setInterval(() => { void refreshSnakeWorld() }, 750)
-    return () => { clearInterval(statusPoll); clearInterval(worldPoll); if (channelRef.current) supabase?.removeChannel(channelRef.current); planMarkersRef.current.forEach((marker) => marker.remove()); map.remove() }
+    const worldPoll = setInterval(() => { void refreshSnakeWorld(); void refreshActiveBerries() }, 750)
+    return () => { clearInterval(statusPoll); clearInterval(worldPoll); if (channelRef.current) supabase?.removeChannel(channelRef.current); planMarkersRef.current.forEach((marker) => marker.remove()); activeBerryMarkersRef.current.forEach((marker) => marker.remove()); map.remove() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -93,7 +96,7 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
     const rows = (r ?? []) as RosterRow[]
     setRoster(rows)
     colorRef.current = assignColors(rows.map((x) => x.player_id))
-    await refreshSnakeWorld()
+    await Promise.all([refreshSnakeWorld(), refreshActiveBerries()])
     renderPlayers()
     // Realtime příjem fyzické/kliknuté polohy slouží hlavně před startem.
     // Během hry se tělo i hlava berou autoritativně ze snake_world.
@@ -111,6 +114,19 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
     })
     ch.subscribe()
     channelRef.current = ch
+  }
+
+  const refreshActiveBerries = async () => {
+    if (!supabase || !mapRef.current) return
+    const { data } = await supabase.rpc('active_strawberries', { p_game: gameId })
+    activeBerryMarkersRef.current.forEach((marker) => marker.remove())
+    activeBerryMarkersRef.current = (data ?? []).map((berry: any) => {
+      const el = document.createElement('div')
+      el.textContent = '🍓'
+      el.title = 'Aktivní jahůdka – vidí ji hráči'
+      Object.assign(el.style, { fontSize: '28px', lineHeight: '30px', filter: 'drop-shadow(0 1px 2px #000)', pointerEvents: 'none' })
+      return new maplibregl.Marker({ element: el, anchor: 'center' }).setLngLat([berry.lng, berry.lat]).addTo(mapRef.current!)
+    })
   }
 
   const refreshSnakeWorld = async () => {
