@@ -9,12 +9,11 @@ export type FetchedStreet = {
   geom: { type: 'LineString'; coordinates: [number, number][] }
 }
 
-// Veřejné Overpass instance (zkoušíme postupně, kdyby jedna nestíhala/byla blokovaná).
+// Přímá záloha pro lokální vývoj. V produkci dotaz obsluhuje /api/overpass,
+// protože veřejné instance bývají přetížené a některé omezují požadavky z prohlížeče.
 const ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
-  'https://overpass.openstreetmap.fr/api/interpreter',
-  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
 ]
 
 // Drivová síť (osy silnic; jedna čára na ulici).
@@ -51,7 +50,7 @@ export async function fetchStreetsInPolygon(poly: [number, number][]): Promise<F
 );
 out geom;`
 
-  const json = await runOverpass(query)
+  const json = await runOverpass(query, bbox)
   // Polygon pro klasifikaci uvnitř/okolí (uzavřený prstenec).
   const ring: [number, number][] = [...poly, poly[0]]
   const areaPoly = turfPolygon([ring])
@@ -77,24 +76,35 @@ out geom;`
   return out
 }
 
-async function runOverpass(query: string): Promise<any> {
-  let lastErr: any = null
+async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Response> {
+  const ctrl = new AbortController()
+  const timer = window.setTimeout(() => ctrl.abort(), timeoutMs)
+  try {
+    return await fetch(url, { headers: { Accept: 'application/json' }, signal: ctrl.signal })
+  } finally {
+    window.clearTimeout(timer)
+  }
+}
+
+async function runOverpass(query: string, bbox: string): Promise<any> {
+  // Vlastní Vercel funkce zkouší více poskytovatelů a neposílá klientům cizí CORS požadavky.
+  try {
+    const res = await fetchWithTimeout(`/api/overpass?bbox=${encodeURIComponent(bbox)}`, 35000)
+    if (!res.ok) throw new Error(`služba odpověděla ${res.status}`)
+    return await res.json()
+  } catch {
+    // Záloha zachovává funkčnost při lokálním vývoji i při dočasném problému funkce.
+  }
+
+  const errors: string[] = []
   for (const url of ENDPOINTS) {
     try {
-      const ctrl = new AbortController()
-      const t = setTimeout(() => ctrl.abort(), 30000)
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: 'data=' + encodeURIComponent(query),
-        signal: ctrl.signal,
-      })
-      clearTimeout(t)
+      const res = await fetchWithTimeout(`${url}?data=${encodeURIComponent(query)}`, 20000)
       if (!res.ok) throw new Error(`Overpass ${res.status}`)
       return await res.json()
-    } catch (e) {
-      lastErr = e
+    } catch (e: any) {
+      errors.push(e?.name === 'AbortError' ? 'vypršel časový limit' : (e?.message ?? String(e)))
     }
   }
-  throw new Error(`Overpass nedostupný: ${lastErr?.message ?? lastErr}`)
+  throw new Error(`Mapová služba je dočasně přetížená (${errors.join(', ')}). Zkus hledání znovu za chvíli.`)
 }
