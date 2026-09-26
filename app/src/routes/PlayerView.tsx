@@ -46,6 +46,8 @@ export default function PlayerView() {
   const [kills, setKills] = useState(0)
   const [, setRespawns] = useState<RespawnPoint[]>([])
   const respawnsRef = useRef<RespawnPoint[]>([])
+  const respawnMarkersRef = useRef<maplibregl.Marker[]>([])
+  const berryMarkersRef = useRef<maplibregl.Marker[]>([])
   const [respawnMessage, setRespawnMessage] = useState('Vyber si respawn bod a dojdi k němu.')
   const [explosion, setExplosion] = useState<string | null>(null)
   const [results, setResults] = useState<WorldRow[]>([])
@@ -54,7 +56,40 @@ export default function PlayerView() {
 
   useEffect(() => { if (!playerRef.current) nav('/', { replace: true }) }, [nav])
 
-  const renderRespawns = () => setSourceData(mapRef.current, 'respawns', fc(respawnsRef.current.map((r) => pointFeature(r.geom.coordinates, { id: r.id, label: r.label, selected: selectedRespawnRef.current === r.id }))))
+  const renderRespawns = () => {
+    const map = mapRef.current
+    if (!map) return
+    setSourceData(map, 'respawns', fc(respawnsRef.current.map((r) => pointFeature(r.geom.coordinates, { id: r.id, label: r.label, selected: selectedRespawnRef.current === r.id }))))
+    respawnMarkersRef.current.forEach((marker) => marker.remove())
+    respawnMarkersRef.current = respawnsRef.current.map((r) => {
+      const selected = selectedRespawnRef.current === r.id
+      const el = document.createElement('button')
+      el.type = 'button'
+      el.textContent = `↻ ${r.label}`
+      el.title = `Respawn ${r.label}`
+      Object.assign(el.style, { background: selected ? '#3fb950' : '#1769aa', color: '#fff', border: '2px solid #fff', borderRadius: '16px', padding: '5px 8px', fontWeight: '700', boxShadow: '0 1px 5px #0008', cursor: phaseRef.current === 'respawn' ? 'pointer' : 'default', whiteSpace: 'nowrap' })
+      el.addEventListener('click', (event) => {
+        event.preventDefault(); event.stopPropagation()
+        if (phaseRef.current !== 'respawn') return
+        selectedRespawnRef.current = r.id
+        renderRespawns()
+      })
+      return new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat(r.geom.coordinates).addTo(map)
+    })
+  }
+
+  const renderBerries = (fruit: { point_id: string; lng: number; lat: number }[]) => {
+    const map = mapRef.current
+    if (!map) return
+    berryMarkersRef.current.forEach((marker) => marker.remove())
+    berryMarkersRef.current = fruit.map((berry) => {
+      const el = document.createElement('div')
+      el.textContent = '🍓'
+      el.title = 'Jahůdka - sebere ji hlava hada'
+      Object.assign(el.style, { fontSize: '28px', lineHeight: '30px', filter: 'drop-shadow(0 1px 2px #000)', pointerEvents: 'none' })
+      return new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat([berry.lng, berry.lat]).addTo(map)
+    })
+  }
 
   useEffect(() => {
     const map = new maplibregl.Map({ container: 'map', style: MAP_STYLE, center: BARRANDOV, zoom: 15 })
@@ -75,7 +110,7 @@ export default function PlayerView() {
       })
       readyRef.current = true; map.fitBounds(BARRANDOV_BBOX, { padding: 40, duration: 0 })
     })
-    return () => map.remove()
+    return () => { respawnMarkersRef.current.forEach((marker) => marker.remove()); berryMarkersRef.current.forEach((marker) => marker.remove()); map.remove() }
   }, [])
 
   const loadMap = async (planId: string) => {
@@ -110,6 +145,7 @@ export default function PlayerView() {
     const fruit = fruitResult.data ?? []
     setActiveBerries(fruit.length)
     setSourceData(mapRef.current, 'berries', fc(fruit.map((b: any) => pointFeature([b.lng, b.lat], { id: b.point_id }))))
+    renderBerries(fruit)
     if (!mine) return
     setLength(Number(mine.current_length_m ?? 10)); setBerries(mine.strawberries_eaten ?? 0); setKills(mine.opponent_explosions ?? 0)
     const route = mine.route?.coordinates as Coord[] | undefined, head = mine.head_pos?.coordinates as Coord | undefined

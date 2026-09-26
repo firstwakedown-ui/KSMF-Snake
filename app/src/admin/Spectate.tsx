@@ -17,6 +17,7 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
   const mapRef = useRef<maplibregl.Map | null>(null)
   const playersRef = useRef<Map<string, P>>(new Map())
   const markersRef = useRef<Map<string, maplibregl.Marker>>(new Map())
+  const planMarkersRef = useRef<maplibregl.Marker[]>([])
   const colorRef = useRef<Map<string, string>>(new Map())
   const channelRef = useRef<ReturnType<NonNullable<typeof supabase>['channel']> | null>(null)
   const [roster, setRoster] = useState<RosterRow[]>([])
@@ -42,7 +43,7 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
       const { data } = await supabase!.from('games').select('status').eq('id', gameId).single()
       if (data?.status) setStatus(data.status)
     }, 3000)
-    return () => { clearInterval(statusPoll); if (channelRef.current) supabase?.removeChannel(channelRef.current); map.remove() }
+    return () => { clearInterval(statusPoll); if (channelRef.current) supabase?.removeChannel(channelRef.current); planMarkersRef.current.forEach((marker) => marker.remove()); map.remove() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -53,6 +54,27 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
     const fc = { type: 'FeatureCollection' as const, features: (edges ?? []).map((r: any) => ({ type: 'Feature' as const, geometry: r.geom, properties: {} })) }
     setSourceData(map, 'streets', fc as any)
     if (fc.features.length) { const [w, s, e, n] = turfBbox(fc as any); map.fitBounds([[w, s], [e, n]], { padding: 30, duration: 0 }) }
+    // Admin vždy vidí všechny herní body - i skryté možné pozice jahůdek.
+    const [{ data: respawns }, { data: berryPoints }] = await Promise.all([
+      supabase!.from('respawn_points').select('label,geom').eq('match_id', planId),
+      supabase!.from('strawberry_points').select('geom').eq('match_id', planId),
+    ])
+    planMarkersRef.current.forEach((marker) => marker.remove())
+    planMarkersRef.current = []
+    for (const point of respawns ?? []) {
+      const el = document.createElement('div')
+      el.textContent = `↻ ${(point as any).label ?? 'R'}`
+      el.title = 'Respawn bod'
+      Object.assign(el.style, { background: '#1769aa', color: '#fff', border: '2px solid #fff', borderRadius: '16px', padding: '5px 8px', fontWeight: '700', boxShadow: '0 1px 5px #0008', whiteSpace: 'nowrap' })
+      planMarkersRef.current.push(new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat((point as any).geom.coordinates).addTo(map))
+    }
+    for (const point of berryPoints ?? []) {
+      const el = document.createElement('div')
+      el.textContent = '🍓'
+      el.title = 'Možný spawn jahůdky'
+      Object.assign(el.style, { fontSize: '24px', lineHeight: '26px', filter: 'grayscale(1) drop-shadow(0 1px 2px #000)', opacity: '0.9' })
+      planMarkersRef.current.push(new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat((point as any).geom.coordinates).addTo(map))
+    }
     // Roster určuje barvy a jména. Ve Snake už nejsou povinné startovní body.
     const { data: r } = await supabase!.rpc('game_roster', { p_game: gameId })
     const rows = (r ?? []) as RosterRow[]
