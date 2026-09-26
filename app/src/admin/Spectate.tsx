@@ -22,6 +22,7 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
   const activeBerryMarkersRef = useRef<maplibregl.Marker[]>([])
   const colorRef = useRef<Map<string, string>>(new Map())
   const channelRef = useRef<ReturnType<NonNullable<typeof supabase>['channel']> | null>(null)
+  const statusRef = useRef(status0)
   const [roster, setRoster] = useState<RosterRow[]>([])
   const [status, setStatus] = useState(status0)
   const [remaining, setRemaining] = useState<number | null>(null)
@@ -47,9 +48,11 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
       const { data } = await supabase!.rpc('active_games')
       const game = (data ?? []).find((row: any) => row.game_id === gameId)
       if (game) {
+        statusRef.current = game.status
         setStatus(game.status)
         setRemaining(game.status === 'running' ? Number(game.remaining_s ?? 0) : null)
       } else {
+        statusRef.current = 'finished'
         setStatus('finished')
         setRemaining(null)
         activeBerryMarkersRef.current.forEach((marker) => marker.remove())
@@ -103,6 +106,9 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
     const ch = supabase!.channel(`game-${gameId}`)
     ch.on('broadcast', { event: 'pos' }, ({ payload }: any) => {
       if (!payload?.id) return
+      // Za běhu je jedinou autoritativní zobrazovanou polohou hlava hada.
+      // GPS/klikací poloha hráče by jinak přehazovala marker tam a zpět.
+      if (statusRef.current === 'running') return
       let p = playersRef.current.get(payload.id)
       if (!p) { p = { nick: payload.nick ?? '?', trail: [], pos: null, lastSeen: 0 }; playersRef.current.set(payload.id, p) }
       p.pos = payload.pos; p.lastSeen = Date.now()
@@ -141,7 +147,7 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
       player.nick = row.nickname
       player.eliminated = !row.active
       player.trail = row.active && row.body?.coordinates?.length ? row.body.coordinates : []
-      if (row.active && row.head?.coordinates) player.pos = row.head.coordinates
+      player.pos = row.active && row.head?.coordinates ? row.head.coordinates : null
     }
     renderPlayers()
   }
@@ -167,6 +173,9 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
         el.textContent = `${p.nick} · ${trailLenM(p.trail)} m`
         el.style.opacity = p.eliminated ? '0.55' : '1'
         mk.setLngLat(p.pos)
+      } else {
+        markersRef.current.get(id)?.remove()
+        markersRef.current.delete(id)
       }
     })
     setSourceData(map, 'ptrails', { type: 'FeatureCollection', features: trails })
@@ -176,6 +185,7 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
   const start = async () => {
     const { error } = await supabase!.rpc('run_game', { p_game: gameId })
     if (error) return
+    statusRef.current = 'running'
     setStatus('running')
     onChanged?.()
   }
@@ -184,6 +194,7 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
     if (!window.confirm('Opravdu ukončit tuto hru? Hráči uvidí výsledky a hra přejde do historie.')) return
     const { error } = await supabase!.rpc('finish_game', { p_game: gameId })
     if (error) return
+    statusRef.current = 'finished'
     setStatus('finished')
     onChanged?.()
   }
