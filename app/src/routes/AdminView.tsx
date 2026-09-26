@@ -42,7 +42,7 @@ type Match = {
 type Plan = { id: string; name: string | null; is_active: boolean }
 type Code = { id: string; code: string; active: boolean }
 type Account = { id: string; nickname: string; created_at: string }
-type Game = { game_id: string; game_name: string; plan_id: string; plan_name: string | null; status: string; capacity: number; joined: number; sim: boolean; run_mode: boolean }
+type Game = { game_id: string; game_name: string; plan_id: string; plan_name: string | null; status: string; capacity: number; joined: number; sim: boolean; run_mode: boolean; remaining_s: number | null }
 type GameMode = 'realtime' | 'sim' | 'run'
 type FinishedGame = { game_id: string; game_name: string; plan_id: string; plan_name: string | null; players: number; started_at: string | null; finished_at: string | null }
 type ReadyPlan = { id: string; name: string | null; starts: number }
@@ -775,6 +775,12 @@ function AdminBoard() {
     const { data: rp } = await supabase!.rpc('ready_plans')
     setReadyPlans((rp ?? []) as ReadyPlan[])
   }
+  useEffect(() => {
+    if (section !== 'manage') return
+    const timer = setInterval(loadGames, 1000)
+    return () => clearInterval(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [section])
   const toggleReady = async (val: boolean) => {
     const mt = matchRef.current
     if (!mt) return
@@ -997,7 +1003,7 @@ function AdminBoard() {
                   <li key={g.game_id}>
                     <span>
                       <b>{g.game_name}</b> {g.sim && <span title="simulace (klikání)">🧪</span>}{g.run_mode && <span title="Run hra (joystick)">🏃</span>}{' '}
-                      <span className="muted">· mapa {g.plan_name ?? '—'} · {g.joined}/{g.capacity} · {g.status === 'lobby' ? 'v lobby' : 'běží'} · #{g.game_id.slice(0, 4)}</span>
+                      <span className="muted">· mapa {g.plan_name ?? '—'} · {g.joined}/{g.capacity} · {g.status === 'lobby' ? 'v lobby' : `zbývá ${Math.floor((g.remaining_s ?? 0) / 60)}:${String((g.remaining_s ?? 0) % 60).padStart(2, '0')}`} · #{g.game_id.slice(0, 4)}</span>
                     </span>
                     <span className="row-actions">
                       <button className="ghost" onClick={() => setSpectate(g)}>Sleduj</button>

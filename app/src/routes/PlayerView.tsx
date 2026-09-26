@@ -50,7 +50,7 @@ export default function PlayerView() {
   const berryMarkersRef = useRef<maplibregl.Marker[]>([])
   const [respawnMessage, setRespawnMessage] = useState('Vyber si respawn bod a dojdi k němu.')
   const [explosion, setExplosion] = useState<string | null>(null)
-  const [results, setResults] = useState<WorldRow[]>([])
+  const [results] = useState<WorldRow[]>([])
   const [sim, setSim] = useState(false)
   const [gameName, setGameName] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -169,14 +169,12 @@ export default function PlayerView() {
     if (!mine.active && phaseRef.current !== 'ended') { setPhase('respawn'); renderRespawns() }
   }
 
-  const finish = async (gameId: string) => { const { data } = await supabase!.rpc('snake_world', { p_game: gameId }); setResults((data ?? []) as WorldRow[]); setPhase('ended') }
-
   useEffect(() => {
     let initializedGame = ''
     const poll = async () => {
       const me = playerRef.current; if (!me || !supabase) return
       const { data } = await supabase.rpc('current_game', { p_player: me.id }); const g = (Array.isArray(data) ? data[0] : data) as GameInfo | undefined
-      if (!g?.game_id) { if (gameRef.current) await finish(gameRef.current.game_id); else setPhase('none'); return }
+      if (!g?.game_id) { if (gameRef.current) nav('/lobby', { replace: true }); else setPhase('none'); return }
       gameRef.current = g
       setGameName(g.game_name || g.plan_name || 'KSMF Snake')
       if (initializedGame !== g.game_id && readyRef.current) { initializedGame = g.game_id; await loadMap(g.plan_id) }
@@ -189,7 +187,7 @@ export default function PlayerView() {
       const elapsed = (Date.now() - new Date(g.started_at).getTime()) / 1000
       if (elapsed < START_COUNTDOWN_S) { setPhase('countdown'); setCountdown(Math.max(1, Math.ceil(START_COUNTDOWN_S - elapsed))); setRemaining(Number(g.game_duration_s ?? 900)); return }
       const left = Math.max(0, Number(g.game_duration_s ?? 900) - Math.max(0, elapsed - START_COUNTDOWN_S)); setRemaining(Math.ceil(left))
-      if (left <= 0) { await finish(g.game_id); return }
+      if (left <= 0) { await supabase.rpc('expire_games'); nav('/lobby', { replace: true }); return }
       if (phaseRef.current !== 'respawn') setPhase('live'); await refreshWorld()
     }
     poll(); const id = setInterval(poll, 1000); return () => clearInterval(id)
@@ -255,7 +253,7 @@ export default function PlayerView() {
         setPhase('respawn')
         renderRespawns()
       }
-      else if (data?.status === 'ended') await finish(g.game_id)
+      else if (data?.status === 'ended') nav('/lobby', { replace: true })
       else { setLead(Math.round(Number(data?.lead_m ?? 0))); setLength(Number(data?.length_m ?? 10)) }
       await refreshWorld()
     }
