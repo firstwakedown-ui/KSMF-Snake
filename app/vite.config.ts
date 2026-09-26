@@ -19,7 +19,7 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff,woff2,pdf}'],
       },
       manifest: {
-        name: 'AchtungDieKM',
+        name: 'KSMF Snake',
         short_name: 'AchtungKM',
         description: 'Lokační hra v reálném městě – had na ulicích.',
         lang: 'cs',

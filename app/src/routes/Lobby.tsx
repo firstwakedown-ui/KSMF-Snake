@@ -2,12 +2,10 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { getPlayer, clearPlayer } from '../lib/session'
-import StartPicker from './StartPicker'
 import VersionBadge from './VersionBadge'
 import TrailsImage from './TrailsImage'
 import Spectate from '../admin/Spectate'
 import InstallHint from './InstallHint'
-import { trailLenM } from '../lib/collision'
 import { loadGameResults, type ResultRow } from '../lib/results'
 
 type LobbyGame = { game_id: string; plan_id: string; plan_name: string | null; capacity: number; joined: number; mine: boolean; my_start: string | null; status: string; alive: boolean | null }
@@ -17,7 +15,6 @@ export default function Lobby() {
   const player = getPlayer()
   const [games, setGames] = useState<LobbyGame[]>([])
   const [myGames, setMyGames] = useState<{ game_id: string; plan_id: string; plan_name: string | null; place: number | null; finished_at: string | null }[]>([])
-  const [picking, setPicking] = useState<LobbyGame | null>(null)
   const [spectate, setSpectate] = useState<LobbyGame | null>(null)
   const [resultsModal, setResultsModal] = useState<{ name: string; rows: ResultRow[]; streets: [number, number][][] } | null>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -47,10 +44,9 @@ export default function Lobby() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const joinWithStart = async (gameId: string, startId: string) => {
-    const { error } = await supabase!.rpc('join_game', { p_game: gameId, p_player: player!.id, p_start: startId })
+  const joinGame = async (gameId: string) => {
+    const { error } = await supabase!.rpc('join_game', { p_game: gameId, p_player: player!.id, p_start: null })
     if (error) { setErr(error.message); return }
-    setPicking(null)
     await load()
   }
   const leave = async (g: LobbyGame) => {
@@ -85,7 +81,7 @@ export default function Lobby() {
               <div className="lobby-card-main">
                 <b>{g.plan_name ?? 'Mapa'}</b>
                 <span className="muted">
-                  {g.joined}/{g.capacity} hráčů{g.mine ? ` · tvůj start: ${g.my_start ?? '?'}` : ''}
+                  {g.joined}/{g.capacity} hráčů
                   {g.status === 'running' ? ' · 🟢 běží' : ''}
                 </span>
               </div>
@@ -99,7 +95,7 @@ export default function Lobby() {
                 </div>
               ) : (
                 <div className="lobby-actions">
-                  {g.status === 'lobby' && <button disabled={full} onClick={() => setPicking(g)}>{full ? 'Plno' : 'Vybrat start'}</button>}
+                  {g.status === 'lobby' && <button disabled={full} onClick={() => joinGame(g.game_id)}>{full ? 'Plno' : 'Připojit se'}</button>}
                   <button className="ghost" onClick={() => setSpectate(g)}>👁️ Jen sledovat</button>
                 </div>
               )}
@@ -122,15 +118,6 @@ export default function Lobby() {
         </div>
       )}
 
-      {picking && (
-        <StartPicker
-          gameId={picking.game_id}
-          planId={picking.plan_id}
-          onJoin={(s) => joinWithStart(picking.game_id, s)}
-          onCancel={() => setPicking(null)}
-        />
-      )}
-
       {spectate && (
         <Spectate
           gameId={spectate.game_id}
@@ -146,11 +133,9 @@ export default function Lobby() {
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
             <h2>Výsledky — {resultsModal.name}</h2>
             <TrailsImage streets={resultsModal.streets} players={resultsModal.rows} width={320} height={240} />
-            <ol className="results">
-              {resultsModal.rows.map((r, i) => (
-                <li key={i}><span className="place">{r.place ?? '—'}.</span> <span style={{ color: r.color }}>●</span> {r.nickname}{r.place === 1 ? ' 🏆' : ''} <span className="muted">· {trailLenM(r.trail)} m</span></li>
-              ))}
-            </ol>
+            <table className="snake-results"><thead><tr><th>Hráč</th><th>Max. délka</th><th>Jahůdky</th><th>Výbuchy soupeřů</th></tr></thead><tbody>
+              {resultsModal.rows.map((r, i) => <tr key={i}><td><span style={{ color: r.color }}>●</span> {r.nickname}</td><td>{Math.round(r.maxLength)} m</td><td>{r.strawberries}</td><td>{r.explosions}</td></tr>)}
+            </tbody></table>
             <button onClick={() => setResultsModal(null)}>Zavřít</button>
           </div>
         </div>

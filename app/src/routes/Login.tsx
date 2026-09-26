@@ -1,11 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { getPlayer, setPlayer, setAdminUnlocked } from '../lib/session'
+import { getPlayer, setPlayer, setAdminToken } from '../lib/session'
 import VersionBadge from './VersionBadge'
 import InstallHint from './InstallHint'
-
-const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD as string | undefined
 
 export default function Login() {
   const nav = useNavigate()
@@ -46,7 +44,7 @@ export default function Login() {
       if (error) throw error
       const row = Array.isArray(data) ? data[0] : data
       if (!row?.id) throw new Error('Přihlášení se nezdařilo.')
-      setPlayer({ id: row.id, nickname: row.nickname })
+      setPlayer({ id: row.id, nickname: row.nickname, token: row.token })
       nav('/lobby', { replace: true })
     } catch (e: any) {
       setErr(e.message ?? String(e))
@@ -55,25 +53,19 @@ export default function Login() {
     }
   }
 
-  const submitAdmin = (e: React.FormEvent) => {
+  const submitAdmin = async (e: React.FormEvent) => {
     e.preventDefault()
     setErr(null)
-    if (!ADMIN_PASSWORD) {
-      setErr('Admin heslo není nastavené (VITE_ADMIN_PASSWORD).')
-      return
-    }
-    if (adminPwd === ADMIN_PASSWORD) {
-      setAdminUnlocked()
-      nav('/admin', { replace: true })
-    } else {
-      setErr('Špatné admin heslo.')
-    }
+    if (!supabase) return
+    const { data, error } = await supabase.rpc('login_admin', { p_password: adminPwd })
+    if (error || !data) { setErr(error?.message ?? 'Špatné admin heslo.'); return }
+    setAdminToken(String(data)); nav('/admin', { replace: true })
   }
 
   return (
     <div className="admin-login glass">
       <div className="admin-login-card">
-        <img src="/logo.gif" alt="AchtungDieKM" className="auth-logo" />
+        <img src="/logo.gif" alt="KSMF Snake" className="auth-logo" />
         <div className="auth-tabs">
           <button className={`pill mode ${tab === 'player' ? 'active' : ''}`} onClick={() => { setTab('player'); setErr(null) }}>Hráč</button>
           <button className={`pill mode ${tab === 'admin' ? 'active' : ''}`} onClick={() => { setTab('admin'); setErr(null) }}>Admin</button>

@@ -5,8 +5,23 @@ import { createClient } from '@supabase/supabase-js'
 const url = import.meta.env.VITE_SUPABASE_URL
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-export const supabase =
-  url && anonKey ? createClient(url, anonKey) : null
+const sessionHeadersFetch: typeof fetch = (input, init = {}) => {
+  let playerToken: string | null = null
+  let adminToken: string | null = null
+  try {
+    const player = JSON.parse(localStorage.getItem('adk_player') ?? 'null')
+    playerToken = player?.token ?? null
+    adminToken = sessionStorage.getItem('ksmf_admin_token')
+  } catch {}
+  const headers = new Headers(init.headers)
+  if (playerToken) headers.set('x-player-token', playerToken)
+  if (adminToken) headers.set('x-admin-token', adminToken)
+  return fetch(input, { ...init, headers })
+}
+
+export const supabase = url && anonKey
+  ? createClient(url, anonKey, { global: { fetch: sessionHeadersFetch } })
+  : null
 
 if (!supabase) {
   // Prototyp #1 (mapa + GPS) běží i bez Supabase – napojení doplníme v dalším kroku.

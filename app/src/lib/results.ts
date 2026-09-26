@@ -3,7 +3,7 @@
 import { supabase } from './supabase'
 import { assignColors } from './players'
 
-export type ResultRow = { nickname: string; place: number | null; color: string; trail: [number, number][] }
+export type ResultRow = { nickname: string; place: number | null; color: string; trail: [number, number][]; maxLength: number; strawberries: number; explosions: number }
 export type GameResults = { rows: ResultRow[]; streets: [number, number][][] }
 
 export async function loadGameResults(gameId: string, planId: string): Promise<GameResults> {
@@ -16,6 +16,9 @@ export async function loadGameResults(gameId: string, planId: string): Promise<G
     place: r.place,
     color: colors.get(r.player_id) ?? '#888',
     trail: r.trail ?? [],
+    maxLength: Number(r.max_length_m ?? 0),
+    strawberries: Number(r.strawberries_eaten ?? 0),
+    explosions: Number(r.opponent_explosions ?? 0),
   }))
   const { data: edges } = await supabase.from('street_edges').select('geom').eq('match_id', planId).eq('enabled', true)
   const streets = (edges ?? []).map((r: any) => r.geom.coordinates as [number, number][])

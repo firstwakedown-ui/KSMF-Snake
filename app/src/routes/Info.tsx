@@ -14,8 +14,8 @@ export default function Info() {
         <span className="muted">{APP_VERSION}</span>
       </div>
       <div className="info-body">
-        <img src="/logo.gif" alt="AchtungDieKM" className="info-logo" />
-        <h1>AchtungDieKM</h1>
+        <img src="/logo.gif" alt="KSMF Snake" className="info-logo" />
+        <h1>KSMF Snake</h1>
         <p className="credits">Vyrobil <b>Claude Code</b> &amp; <b>WakeDown</b> · <a href="mailto:wakedown@matfyz.cz">wakedown@matfyz.cz</a></p>
         <p className="muted">Lokační hra v reálném městě — had na ulicích. Níže je <b>deník vývoje</b>: jak hra vznikala krok za krokem.</p>
         <hr />

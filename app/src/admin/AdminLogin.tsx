@@ -1,11 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { setAdminUnlocked } from '../lib/session'
-
-// Jednoduchá brána admina: sdílené heslo z env (VITE_ADMIN_PASSWORD).
-// ⚠️ DOČASNÉ: heslo je v klientském buildu (uzavřená skupina, prototyp).
-//    Ostré přihlášení (Supabase Auth – PIN na e-mail, FR-20) doplníme později. Viz TODO.
-const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD as string | undefined
+import { setAdminToken } from '../lib/session'
+import { supabase } from '../lib/supabase'
 
 export { isAdminUnlocked } from '../lib/session'
 
@@ -13,24 +9,18 @@ export default function AdminLogin({ onUnlock }: { onUnlock: () => void }) {
   const [pwd, setPwd] = useState('')
   const [err, setErr] = useState<string | null>(null)
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!ADMIN_PASSWORD) {
-      setErr('Admin heslo není nastavené (VITE_ADMIN_PASSWORD v .env).')
-      return
-    }
-    if (pwd === ADMIN_PASSWORD) {
-      setAdminUnlocked()
-      onUnlock()
-    } else {
-      setErr('Špatné heslo.')
-    }
+    if (!supabase) return
+    const { data, error } = await supabase.rpc('login_admin', { p_password: pwd })
+    if (error || !data) { setErr(error?.message ?? 'Špatné heslo.'); return }
+    setAdminToken(String(data)); onUnlock()
   }
 
   return (
     <div className="admin-login glass">
       <form className="admin-login-card" onSubmit={submit}>
-        <h1>AchtungDieKM — Admin</h1>
+        <h1>KSMF Snake — Admin</h1>
         <p>Správa hracího území. Zadej admin heslo.</p>
         <input
           type="password"

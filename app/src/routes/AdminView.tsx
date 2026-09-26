@@ -11,11 +11,10 @@ import { startMarkerEl } from '../lib/startMarker'
 import AdminLogin, { isAdminUnlocked } from '../admin/AdminLogin'
 import Spectate from '../admin/Spectate'
 import TrailsImage from './TrailsImage'
-import { trailLenM } from '../lib/collision'
 import { loadGameResults, type ResultRow } from '../lib/results'
 
 type Section = 'plans' | 'manage'
-type Mode = 'area' | 'streets' | 'connect' | 'starts'
+type Mode = 'area' | 'streets' | 'connect' | 'respawns' | 'berries'
 
 type Match = {
   id: string
@@ -31,6 +30,14 @@ type Match = {
   run_speed_mps: number
   sprint_speed_mps: number
   sprint_range_m: number
+  snake_initial_length_m: number
+  strawberry_growth_m: number
+  game_duration_s: number
+  snake_speed_mps: number
+  strawberry_spawn_min_s: number
+  strawberry_spawn_max_s: number
+  max_lead_m: number
+  respawn_countdown_s: number
 }
 type Plan = { id: string; name: string | null; is_active: boolean }
 type Code = { id: string; code: string; active: boolean }
@@ -41,20 +48,23 @@ type FinishedGame = { game_id: string; plan_id: string; plan_name: string | null
 type ReadyPlan = { id: string; name: string | null; starts: number }
 type Edge = { id: number; name: string | null; enabled: boolean; is_foot: boolean; geom: any }
 type Start = { id: string; label: string; coord: [number, number] }
+type MapPoint = { id: string; label: string; coord: [number, number] }
 
-const MATCH_COLS = 'id,name,area,is_active,ready,footpaths_enabled,idle_timeout_s,outside_timeout_s,snap_tolerance_m,walk_speed_mps,run_speed_mps,sprint_speed_mps,sprint_range_m'
+const MATCH_COLS = 'id,name,area,is_active,ready,footpaths_enabled,idle_timeout_s,outside_timeout_s,snap_tolerance_m,walk_speed_mps,run_speed_mps,sprint_speed_mps,sprint_range_m,snake_initial_length_m,strawberry_growth_m,game_duration_s,snake_speed_mps,strawberry_spawn_min_s,strawberry_spawn_max_s,max_lead_m,respawn_countdown_s'
 
 const MODE_LABEL: Record<Mode, string> = {
   area: 'Oblast',
   streets: 'Ulice',
   connect: 'Spojnice',
-  starts: 'Starty',
+  respawns: 'Respawny',
+  berries: 'Jahůdky',
 }
 const MODE_HINT: Record<Mode, string> = {
   area: 'Klikáním obkresli území (min. 3 body), pak „Najít ulice v oblasti". Ulice uvnitř = oranžové, okolí = šedé.',
   streets: 'Klik na cestu (silnice oranžová / chodník žlutý) ji zařadí/vyřadí ze hry. Šedá = mimo hru, hráč ji nevidí.',
   connect: 'Ruční spojnice: klikni 1. a 2. bod → vznikne rovná čára (cesta navíc). Opakuj pro další.',
-  starts: 'Klik do mapy = nový start · táhni praporek = přesuň · dvojklik = smazat.',
+  respawns: 'Klik do mapy = nový respawn · táhni bod = přesuň · dvojklik = smazat.',
+  berries: 'Klik do mapy = nový skrytý jahůdkový bod · dvojklik na bod = smazat.',
 }
 
 export default function AdminView() {
@@ -71,6 +81,8 @@ function AdminBoard() {
   const startsRef = useRef<Start[]>([])
   const areaDraftRef = useRef<[number, number][]>([])
   const startMarkersRef = useRef<maplibregl.Marker[]>([])
+  const berryMarkersRef = useRef<maplibregl.Marker[]>([])
+  const berriesRef = useRef<MapPoint[]>([])
   const connectFirstRef = useRef<[number, number] | null>(null)
   const connectMarkerRef = useRef<maplibregl.Marker | null>(null)
 
@@ -104,6 +116,14 @@ function AdminBoard() {
   const [runMps, setRunMps] = useState(7.5)
   const [sprintMps, setSprintMps] = useState(12.0)
   const [sprintRange, setSprintRange] = useState(200)
+  const [snakeLength, setSnakeLength] = useState(10)
+  const [berryGrowth, setBerryGrowth] = useState(10)
+  const [gameMinutes, setGameMinutes] = useState(15)
+  const [snakeKmh, setSnakeKmh] = useState(3)
+  const [berryMin, setBerryMin] = useState(10)
+  const [berryMax, setBerryMax] = useState(60)
+  const [maxLead, setMaxLead] = useState(100)
+  const [respawnSeconds, setRespawnSeconds] = useState(3)
 
   const setModeBoth = (m: Mode) => {
     if (modeRef.current === 'connect' && m !== 'connect') clearConnectPending()
@@ -160,7 +180,7 @@ function AdminBoard() {
       map.on('click', onMapClick)
       map.on('mousemove', (e) => {
         const m = modeRef.current
-        if (m === 'area' || m === 'connect' || m === 'starts') {
+        if (m === 'area' || m === 'connect' || m === 'respawns' || m === 'berries') {
           map.getCanvas().style.cursor = 'crosshair'
         } else if (m === 'streets') {
           const hit = map.queryRenderedFeatures(e.point, { layers: ['streets-line'] }).length > 0
@@ -275,6 +295,14 @@ function AdminBoard() {
     setRunMps(Number(mt.run_speed_mps))
     setSprintMps(Number(mt.sprint_speed_mps))
     setSprintRange(mt.sprint_range_m)
+    setSnakeLength(Number(mt.snake_initial_length_m))
+    setBerryGrowth(Number(mt.strawberry_growth_m))
+    setGameMinutes(Math.round(mt.game_duration_s / 60))
+    setSnakeKmh(Number(mt.snake_speed_mps) * 3.6)
+    setBerryMin(mt.strawberry_spawn_min_s)
+    setBerryMax(mt.strawberry_spawn_max_s)
+    setMaxLead(Number(mt.max_lead_m))
+    setRespawnSeconds(mt.respawn_countdown_s)
     setFootEnabled(mt.footpaths_enabled)
     applyArea(mt.area)
     areaDraftRef.current = []
@@ -286,10 +314,14 @@ function AdminBoard() {
     edgesRef.current = (edges ?? []) as Edge[]
     refreshStreets()
 
-    const { data: sp, error: e4 } = await supabase!.from('start_points').select('id,label,geom').eq('match_id', planId)
+    const { data: sp, error: e4 } = await supabase!.from('respawn_points').select('id,label,geom').eq('match_id', planId)
     if (e4) throw e4
     startsRef.current = (sp ?? []).map((r: any) => ({ id: r.id, label: r.label ?? '', coord: r.geom.coordinates as [number, number] }))
     refreshStarts()
+    const { data: bp, error: e5 } = await supabase!.from('strawberry_points').select('id,geom').eq('match_id', planId)
+    if (e5) throw e5
+    berriesRef.current = (bp ?? []).map((r: any, i) => ({ id: r.id, label: `J${i + 1}`, coord: r.geom.coordinates as [number, number] }))
+    refreshBerries()
 
     fitToData()
   }
@@ -339,7 +371,7 @@ function AdminBoard() {
       mk.on('dragend', async () => {
         const ll = mk.getLngLat()
         s.coord = [ll.lng, ll.lat]
-        const { error: err } = await supabase!.rpc('move_start_point', { p_id: s.id, p_lng: ll.lng, p_lat: ll.lat })
+        const { error: err } = await supabase!.rpc('move_respawn_point', { p_id: s.id, p_lng: ll.lng, p_lat: ll.lat })
         if (err) setError(`Přesun startu: ${err.message}`)
         else setStatus(`Start ${s.label} přesunut.`)
       })
@@ -353,6 +385,18 @@ function AdminBoard() {
   const refreshStarts = () => {
     syncStartMarkers()
     setStartCount(startsRef.current.length)
+  }
+  const refreshBerries = () => {
+    const map = mapRef.current
+    if (!map) return
+    berryMarkersRef.current.forEach((m) => m.remove())
+    berryMarkersRef.current = berriesRef.current.map((b) => {
+      const el = document.createElement('div')
+      el.textContent = '🍓'; el.style.fontSize = '22px'; el.style.cursor = 'pointer'
+      el.title = `${b.label} – skrytý spawn jahůdky`
+      el.addEventListener('dblclick', async (ev) => { ev.stopPropagation(); await removeBerry(b.id) })
+      return new maplibregl.Marker({ element: el }).setLngLat(b.coord).addTo(map)
+    })
   }
   const refreshDraft = () => {
     const pts = areaDraftRef.current
@@ -392,7 +436,7 @@ function AdminBoard() {
       refreshDraft()
     } else if (m === 'connect') {
       await onConnectClick(map, [e.lngLat.lng, e.lngLat.lat])
-    } else if (m === 'starts') {
+    } else if (m === 'respawns') {
       // Klik blízko existujícího startu nepřidává nový (mazání = dvojklik na praporek).
       const near = startsRef.current.some((s) => {
         const sp = map.project(s.coord)
@@ -400,6 +444,9 @@ function AdminBoard() {
       })
       if (near) return
       await addStart(e.lngLat.lng, e.lngLat.lat)
+    } else if (m === 'berries') {
+      const near = berriesRef.current.some((b) => { const p = map.project(b.coord); return (p.x-e.point.x)**2+(p.y-e.point.y)**2 < 24*24 })
+      if (!near) await addBerry(e.lngLat.lng, e.lngLat.lat)
     }
   }
 
@@ -429,8 +476,8 @@ function AdminBoard() {
     const mt = matchRef.current
     if (!mt) return
     const maxN = startsRef.current.reduce((m, s) => Math.max(m, startNum(s.label)), 0)
-    const label = `S${maxN + 1}`
-    const { data, error: err } = await supabase!.rpc('add_start_point', { p_match: mt.id, p_label: label, p_lng: lng, p_lat: lat })
+    const label = `R${maxN + 1}`
+    const { data, error: err } = await supabase!.rpc('add_respawn_point', { p_match: mt.id, p_label: label, p_lng: lng, p_lat: lat })
     if (err) {
       setError(`Přidání startu: ${err.message}`)
       return
@@ -440,7 +487,7 @@ function AdminBoard() {
     setStatus(`Start ${label} přidán.`)
   }
   const removeStart = async (id: string) => {
-    const { error: err } = await supabase!.from('start_points').delete().eq('id', id)
+    const { error: err } = await supabase!.rpc('remove_respawn_point', { p_id: id })
     if (err) {
       setError(`Mazání startu: ${err.message}`)
       return
@@ -449,9 +496,8 @@ function AdminBoard() {
     // Přečíslovat zbývající starty na S1..Sn (podle pořadí).
     const ordered = [...startsRef.current].sort((a, b) => startNum(a.label) - startNum(b.label))
     for (let i = 0; i < ordered.length; i++) {
-      const want = `S${i + 1}`
+      const want = `R${i + 1}`
       if (ordered[i].label !== want) {
-        await supabase!.from('start_points').update({ label: want }).eq('id', ordered[i].id)
         ordered[i].label = want
       }
     }
@@ -462,7 +508,7 @@ function AdminBoard() {
   const clearStarts = async () => {
     if (!startsRef.current.length) return
     if (!window.confirm('Smazat všechny startovní body tohoto plánu?')) return
-    const { error: err } = await supabase!.from('start_points').delete().eq('match_id', matchRef.current!.id)
+    const { error: err } = await supabase!.rpc('clear_respawn_points', { p_match: matchRef.current!.id })
     if (err) {
       setError(`Mazání startů: ${err.message}`)
       return
@@ -470,6 +516,17 @@ function AdminBoard() {
     startsRef.current = []
     refreshStarts()
     setStatus('Všechny starty smazány.')
+  }
+  const addBerry = async (lng: number, lat: number) => {
+    const mt = matchRef.current; if (!mt) return
+    const { data, error: err } = await supabase!.rpc('add_strawberry_point', { p_match: mt.id, p_lng: lng, p_lat: lat })
+    if (err) { setError(`Jahůdkový bod: ${err.message}`); return }
+    berriesRef.current.push({ id: data as string, label: `J${berriesRef.current.length + 1}`, coord: [lng, lat] }); refreshBerries(); setStatus('Jahůdkový bod přidán.')
+  }
+  const removeBerry = async (id: string) => {
+    const { error: err } = await supabase!.rpc('remove_strawberry_point', { p_id: id })
+    if (err) { setError(`Mazání jahůdkového bodu: ${err.message}`); return }
+    berriesRef.current = berriesRef.current.filter((b) => b.id !== id); refreshBerries(); setStatus('Jahůdkový bod smazán.')
   }
 
   // --- Chodníky: HROMADNÉ zapnutí/vypnutí všech chodníků (jen pohodlí; jednotlivě jdou klikat v Ulicích) ---
@@ -776,6 +833,9 @@ function AdminBoard() {
     const patch = {
       idle_timeout_s: idle, outside_timeout_s: outside, snap_tolerance_m: tol,
       walk_speed_mps: walkMps, run_speed_mps: runMps, sprint_speed_mps: sprintMps, sprint_range_m: sprintRange,
+      snake_initial_length_m: snakeLength, strawberry_growth_m: berryGrowth, game_duration_s: gameMinutes * 60,
+      snake_speed_mps: snakeKmh / 3.6, strawberry_spawn_min_s: berryMin, strawberry_spawn_max_s: berryMax,
+      max_lead_m: maxLead, respawn_countdown_s: respawnSeconds,
     }
     const { error: err } = await supabase!.from('matches').update(patch).eq('id', mt.id)
     if (err) {
@@ -814,6 +874,7 @@ function AdminBoard() {
             ))}
             <span className="pill">cesty: {edgeCount.on}✓ / {edgeCount.off}✕</span>
             <span className="pill">starty: {startCount}</span>
+            <span className="pill">jahůdkové body: {berriesRef.current.length}</span>
             {error && <span className="pill warn">{error}</span>}
           </div>
 
@@ -849,12 +910,13 @@ function AdminBoard() {
           </div>
         )}
 
-            {mode === 'starts' && (
+            {mode === 'respawns' && (
               <div className="admin-actions">
-                <button onClick={clearStarts} disabled={startCount === 0}>Smazat starty</button>
-                <span className="admin-panel-hint">{startCount} startů · táhni = přesuň · dvojklik = smazat</span>
+                <button onClick={clearStarts} disabled={startCount === 0}>Smazat respawny</button>
+                <span className="admin-panel-hint">{startCount} respawnů · táhni = přesuň · dvojklik = smazat</span>
               </div>
             )}
+            {mode === 'berries' && <div className="admin-actions"><span className="admin-panel-hint">{berriesRef.current.length} bodů · prázdné body hráči neuvidí · dvojklik = smazat</span></div>}
           </div>
         </>
       )}
@@ -867,7 +929,7 @@ function AdminBoard() {
               <button onClick={() => setSection('plans')}>🗺️ Plány</button>
               <button className="active">⚙️ Správa</button>
             </div>
-            <span className="manage-title"><b>AchtungDieKM</b> · správa</span>
+            <span className="manage-title"><b>KSMF Snake</b> · správa</span>
             <Link className="pill link" to="/">hra →</Link>
           </div>
 
@@ -889,6 +951,14 @@ function AdminBoard() {
               <h2>Nastavení zápasu</h2>
               <p className="muted">Plán: {match?.name ?? '—'}</p>
               <p className="muted">Tyto hodnoty se <b>uloží do každé nově založené hry</b> (snapshot) – stejná mapa tak může jet jednou pomalu, jednou rychle. Změna se nepromítne do už založených her.</p>
+              <div className="card-row"><label>Výchozí délka hada (m)</label><input type="number" min={1} value={snakeLength} onChange={(e) => setSnakeLength(+e.target.value)} /></div>
+              <div className="card-row"><label>Prodloužení za jahůdku (m)</label><input type="number" min={1} value={berryGrowth} onChange={(e) => setBerryGrowth(+e.target.value)} /></div>
+              <div className="card-row"><label>Délka hry (min)</label><input type="number" min={1} value={gameMinutes} onChange={(e) => setGameMinutes(+e.target.value)} /></div>
+              <div className="card-row"><label>Rychlost hada (km/h)</label><input type="number" min={0.5} step={0.1} value={snakeKmh} onChange={(e) => setSnakeKmh(+e.target.value)} /></div>
+              <div className="card-row"><label>Jahůdka nejdříve (s)</label><input type="number" min={1} value={berryMin} onChange={(e) => setBerryMin(+e.target.value)} /></div>
+              <div className="card-row"><label>Jahůdka nejpozději (s)</label><input type="number" min={berryMin} value={berryMax} onChange={(e) => setBerryMax(+e.target.value)} /></div>
+              <div className="card-row"><label>Maximální náskok (m)</label><input type="number" min={5} value={maxLead} onChange={(e) => setMaxLead(+e.target.value)} /></div>
+              <div className="card-row"><label>Respawn odpočet (s)</label><input type="number" min={0} value={respawnSeconds} onChange={(e) => setRespawnSeconds(+e.target.value)} /></div>
               <div className="card-row"><label>Nečinnost (s) <span className="tip" title="Po kolika sekundách bez pohybu hráč vypadne (stojí na místě). Default 30 s.">ⓘ</span></label><input type="number" min={5} value={idle} onChange={(e) => setIdle(+e.target.value)} /></div>
               <div className="card-row"><label>Mimo ulici – limit (s) <span className="tip" title="Když hráč opustí ulici (svou stopu), kolik sekund má na návrat na konec stopy, než vypadne. Default 30 s.">ⓘ</span></label><input type="number" min={3} value={outside} onChange={(e) => setOutside(+e.target.value)} /></div>
               <div className="card-row"><label>Tolerance snap (m) <span className="tip" title="Do kolika metrů od osy ulice se poloha přichytí na ulici a počítá se jako na ulici. Větší = benevolentnější GPS. Default 30 m.">ⓘ</span></label><input type="number" min={5} value={tol} onChange={(e) => setTol(+e.target.value)} /></div>
@@ -1006,15 +1076,9 @@ function AdminBoard() {
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
             <h2>Výsledky — {resultsModal.name}</h2>
             <TrailsImage streets={resultsModal.streets} players={resultsModal.rows} width={380} height={300} />
-            <ol className="results">
-              {resultsModal.rows.map((r, i) => (
-                <li key={i}>
-                  <span className="place">{r.place ?? '—'}.</span>
-                  <span style={{ color: r.color }}>●</span> {r.nickname}{r.place === 1 ? ' 🏆' : ''} <span className="muted">· {trailLenM(r.trail)} m</span>
-                </li>
-              ))}
-              {resultsModal.rows.length === 0 && <li className="muted">Bez hráčů.</li>}
-            </ol>
+            <table className="snake-results"><thead><tr><th>Hráč</th><th>Max. délka</th><th>Jahůdky</th><th>Výbuchy soupeřů</th></tr></thead><tbody>
+              {resultsModal.rows.map((r, i) => <tr key={i}><td><span style={{ color: r.color }}>●</span> {r.nickname}</td><td>{Math.round(r.maxLength)} m</td><td>{r.strawberries}</td><td>{r.explosions}</td></tr>)}
+            </tbody></table>
             <button onClick={() => setResultsModal(null)}>Zavřít</button>
           </div>
         </div>

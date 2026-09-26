@@ -593,6 +593,9 @@ select option, select optgroup {
 .results li { padding: 6px 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
 .results li.me { background: rgba(255, 255, 255, 0.10); border-radius: 8px; color: #fff; }
 .results .place { display: inline-block; width: 24px; color: var(--txt-dim); font-weight: 700; }
+.snake-results { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
+.snake-results th, .snake-results td { padding: 8px; text-align: left; border-bottom: 1px solid #30363d; }
+.snake-results th { color: var(--txt-dim); font-size: 12px; }
 .trails-svg { display: block; margin: 6px auto 10px; border: 1px solid #30363d; border-radius: 8px; max-width: 100%; }
 .trails-thumb { cursor: zoom-in; display: block; }
 .img-zoom { position: fixed; inset: 0; z-index: 200; background: rgba(0, 0, 0, 0.88); display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: zoom-out; }

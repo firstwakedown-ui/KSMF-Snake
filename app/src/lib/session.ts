@@ -1,5 +1,5 @@
 // Jednoduchá session bez Supabase Auth: hráč v localStorage, admin odemčení v sessionStorage.
-export type PlayerSession = { id: string; nickname: string }
+export type PlayerSession = { id: string; nickname: string; token: string }
 
 const PLAYER_KEY = 'adk_player'
 const ADMIN_KEY = 'adk_admin_ok'
@@ -20,11 +20,14 @@ export function clearPlayer() {
 }
 
 export function isAdminUnlocked(): boolean {
-  return sessionStorage.getItem(ADMIN_KEY) === '1'
+  return sessionStorage.getItem(ADMIN_KEY) === '1' && !!getAdminToken()
 }
 export function setAdminUnlocked() {
   sessionStorage.setItem(ADMIN_KEY, '1')
 }
+export function getAdminToken(): string | null { return sessionStorage.getItem('ksmf_admin_token') }
+export function setAdminToken(token: string) { sessionStorage.setItem('ksmf_admin_token', token); setAdminUnlocked() }
 export function clearAdminUnlocked() {
   sessionStorage.removeItem(ADMIN_KEY)
+  sessionStorage.removeItem('ksmf_admin_token')
 }

@@ -1,9 +1,9 @@
 {
-  "name": "achtungdiekm-app",
+  "name": "ksmf-snake-app",
   "private": true,
   "version": "1.1.1",
   "type": "module",
-  "description": "AchtungDieKM – PWA frontend (React + Vite + MapLibre + Supabase)",
+  "description": "KSMF Snake – městská multiplayerová PWA hra",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
