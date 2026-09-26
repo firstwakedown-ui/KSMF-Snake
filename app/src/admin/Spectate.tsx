@@ -122,12 +122,21 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
     onChanged?.()
   }
 
+  const finish = async () => {
+    if (!window.confirm('Opravdu ukončit tuto hru? Hráči uvidí výsledky a hra přejde do historie.')) return
+    const { error } = await supabase!.rpc('finish_game', { p_game: gameId })
+    if (error) return
+    setStatus('finished')
+    onChanged?.()
+  }
+
   return (
     <div className="spectate">
       <div className="spectate-bar">
         <b>{readOnly ? '👁️ Divák' : 'Sleduj hru'}</b>
         <span className="muted">{status === 'lobby' ? 'čeká v lobby' : status === 'finished' ? 'skončila' : 'běží'}</span>
         {status === 'lobby' && !readOnly && <button onClick={start}>Spustit hru</button>}
+        {status === 'running' && !readOnly && <button className="danger" onClick={finish}>Ukončit hru</button>}
         <button className="ghost" onClick={onClose}>Zavřít</button>
       </div>
       <div id="spectate-map" className="spectate-map" />

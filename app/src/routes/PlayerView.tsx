@@ -41,6 +41,8 @@ export default function PlayerView() {
   const [lead, setLead] = useState(0)
   const [length, setLength] = useState(10)
   const [berries, setBerries] = useState(0)
+  const [activeBerries, setActiveBerries] = useState(0)
+  const [berryPointCount, setBerryPointCount] = useState(0)
   const [kills, setKills] = useState(0)
   const [, setRespawns] = useState<RespawnPoint[]>([])
   const respawnsRef = useRef<RespawnPoint[]>([])
@@ -59,8 +61,10 @@ export default function PlayerView() {
     mapRef.current = map
     map.on('load', () => {
       map.addSource('streets', { type: 'geojson', data: emptyFC() }); map.addLayer({ id: 'streets-line', type: 'line', source: 'streets', paint: { 'line-color': '#57606a', 'line-width': 3, 'line-opacity': .65 } })
-      map.addSource('bodies', { type: 'geojson', data: emptyFC() }); map.addLayer({ id: 'bodies-line', type: 'line', source: 'bodies', paint: { 'line-color': ['get', 'color'], 'line-width': 7, 'line-opacity': .92 } })
       map.addSource('future', { type: 'geojson', data: emptyFC() }); map.addLayer({ id: 'future-line', type: 'line', source: 'future', paint: { 'line-color': '#fff', 'line-width': 3, 'line-dasharray': [2, 1], 'line-opacity': .65 } })
+      // Tělo je nad budoucí trasou: hráč tak vždy spolehlivě rozezná skutečnou překážku.
+      map.addSource('bodies', { type: 'geojson', data: emptyFC() }); map.addLayer({ id: 'bodies-line', type: 'line', source: 'bodies', paint: { 'line-color': ['get', 'color'], 'line-width': 7, 'line-opacity': .92 } })
+      map.addSource('my-body', { type: 'geojson', data: emptyFC() }); map.addLayer({ id: 'my-body-line', type: 'line', source: 'my-body', paint: { 'line-color': ['get', 'color'], 'line-width': 10, 'line-opacity': 1, 'line-blur': .25 } })
       map.addSource('heads', { type: 'geojson', data: emptyFC() }); map.addLayer({ id: 'heads-circle', type: 'circle', source: 'heads', paint: { 'circle-radius': 8, 'circle-color': ['get', 'color'], 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } }); map.addLayer({ id: 'heads-label', type: 'symbol', source: 'heads', layout: { 'text-field': ['get', 'nick'], 'text-size': 11, 'text-offset': [0, 1.4] }, paint: { 'text-color': '#fff', 'text-halo-color': '#0d1117', 'text-halo-width': 2 } })
       map.addSource('berries', { type: 'geojson', data: emptyFC() }); map.addLayer({ id: 'berries-circle', type: 'circle', source: 'berries', paint: { 'circle-radius': 9, 'circle-color': '#ff375f', 'circle-stroke-color': '#7a001b', 'circle-stroke-width': 2 } }); map.addLayer({ id: 'berries-label', type: 'symbol', source: 'berries', layout: { 'text-field': '🍓', 'text-size': 17, 'text-allow-overlap': true } })
       map.addSource('respawns', { type: 'geojson', data: emptyFC() }); map.addLayer({ id: 'respawns-circle', type: 'circle', source: 'respawns', paint: { 'circle-radius': 12, 'circle-color': ['case', ['get', 'selected'], '#3fb950', '#1f6feb'], 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } }); map.addLayer({ id: 'respawns-label', type: 'symbol', source: 'respawns', layout: { 'text-field': ['get', 'label'], 'text-size': 12 }, paint: { 'text-color': '#fff' } })
@@ -75,23 +79,37 @@ export default function PlayerView() {
   }, [])
 
   const loadMap = async (planId: string) => {
-    const { data } = await supabase!.from('street_edges').select('geom').eq('match_id', planId).eq('enabled', true)
+    const [{ data }, { data: respawns }, { data: berryPoints }] = await Promise.all([
+      supabase!.from('street_edges').select('geom').eq('match_id', planId).eq('enabled', true),
+      supabase!.from('respawn_points').select('id,label,geom').eq('match_id', planId),
+      supabase!.from('strawberry_points').select('id').eq('match_id', planId),
+    ])
     const features = (data ?? []).map((r: any) => ({ type: 'Feature' as const, geometry: r.geom, properties: {} }))
     setSourceData(mapRef.current, 'streets', fc(features))
+    respawnsRef.current = (respawns ?? []) as RespawnPoint[]
+    setRespawns(respawnsRef.current)
+    renderRespawns()
+    setBerryPointCount((berryPoints ?? []).length)
     if (features.length) { const [w, s, e, n] = turfBbox(fc(features)); mapRef.current?.fitBounds([[w, s], [e, n]], { padding: 40, duration: 0 }) }
   }
 
   const refreshWorld = async () => {
     const g = gameRef.current, me = playerRef.current
     if (!g || !me || !supabase || !readyRef.current) return
-    const [{ data: world }, { data: fruit }, { data: mine }] = await Promise.all([
+    const [{ data: world }, fruitResult, { data: mine }] = await Promise.all([
       supabase.rpc('snake_world', { p_game: g.game_id }), supabase.rpc('active_strawberries', { p_game: g.game_id }),
       supabase.from('snake_states').select('route,head_pos,active,current_length_m,strawberries_eaten,opponent_explosions').eq('game_id', g.game_id).eq('player_id', me.id).maybeSingle(),
     ])
     const rows = (world ?? []) as WorldRow[]; colorsRef.current = assignColors(rows.map((r) => r.player_id))
-    setSourceData(mapRef.current, 'bodies', fc(rows.filter((r) => r.active && r.body?.coordinates?.length).map((r) => lineFeature(r.body!.coordinates, { color: colorsRef.current.get(r.player_id) ?? '#888' }))))
+    const bodies = rows.filter((r) => r.active && r.body?.coordinates?.length)
+    setSourceData(mapRef.current, 'bodies', fc(bodies.map((r) => lineFeature(r.body!.coordinates, { color: colorsRef.current.get(r.player_id) ?? '#888' }))))
+    const mineBody = bodies.find((r) => r.player_id === me.id)
+    setSourceData(mapRef.current, 'my-body', mineBody ? fc([lineFeature(mineBody.body!.coordinates, { color: colorsRef.current.get(me.id) ?? '#3fb950' })]) : emptyFC())
     setSourceData(mapRef.current, 'heads', fc(rows.filter((r) => r.active && r.head?.coordinates).map((r) => pointFeature(r.head!.coordinates, { color: colorsRef.current.get(r.player_id) ?? '#888', nick: r.nickname }))))
-    setSourceData(mapRef.current, 'berries', fc((fruit ?? []).map((b: any) => pointFeature([b.lng, b.lat], { id: b.point_id }))))
+    if (fruitResult.error) setError(`Jahůdky: ${fruitResult.error.message}`)
+    const fruit = fruitResult.data ?? []
+    setActiveBerries(fruit.length)
+    setSourceData(mapRef.current, 'berries', fc(fruit.map((b: any) => pointFeature([b.lng, b.lat], { id: b.point_id }))))
     if (!mine) return
     setLength(Number(mine.current_length_m ?? 10)); setBerries(mine.strawberries_eaten ?? 0); setKills(mine.opponent_explosions ?? 0)
     const route = mine.route?.coordinates as Coord[] | undefined, head = mine.head_pos?.coordinates as Coord | undefined
@@ -116,7 +134,7 @@ export default function PlayerView() {
       }
       if (g.status === 'lobby' || !g.started_at) { setPhase('waiting'); return }
       const elapsed = (Date.now() - new Date(g.started_at).getTime()) / 1000
-      if (elapsed < START_COUNTDOWN_S) { setPhase('countdown'); setCountdown(Math.max(1, Math.ceil(START_COUNTDOWN_S - elapsed))); return }
+      if (elapsed < START_COUNTDOWN_S) { setPhase('countdown'); setCountdown(Math.max(1, Math.ceil(START_COUNTDOWN_S - elapsed))); setRemaining(Number(g.game_duration_s ?? 900)); return }
       const left = Math.max(0, Number(g.game_duration_s ?? 900) - Math.max(0, elapsed - START_COUNTDOWN_S)); setRemaining(Math.ceil(left))
       if (left <= 0) { await finish(g.game_id); return }
       if (phaseRef.current !== 'respawn') setPhase('live'); await refreshWorld()
@@ -168,7 +186,7 @@ export default function PlayerView() {
         const { data, error: e } = await supabase.rpc('snake_respawn', { p_game: g.game_id, p_player: me.id, p_point: pointId, p_lng: pos[0], p_lat: pos[1] }); if (e) { setError(e.message); return }
         if (data?.status === 'approaching') setRespawnMessage(`Dojdi k vybranému bodu — ${data.distance_m} m`)
         if (data?.status === 'countdown') setRespawnMessage(`Vracíš se do hry — ${data.seconds}`)
-        if (data?.status === 'live') { respawnsRef.current = []; setRespawns([]); selectedRespawnRef.current = null; setSourceData(mapRef.current, 'respawns', emptyFC()); setExplosion(null); setPhase('live') }
+        if (data?.status === 'live') { selectedRespawnRef.current = null; renderRespawns(); setExplosion(null); setPhase('live') }
         return
       }
       const { data, error: e } = await supabase.rpc('snake_tick', { p_game: g.game_id, p_player: me.id, p_lng: pos[0], p_lat: pos[1] }); if (e) { setError(e.message); return }
@@ -182,7 +200,7 @@ export default function PlayerView() {
 
   const fmtTime = (s: number | null) => s == null ? '—' : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
   return <><div id="map" /><VersionBadge />
-    <div className="hud"><span><b>KSMF Snake</b></span>{phase === 'live' && <><span className="pill">⏱ {fmtTime(remaining)}</span><span className="pill">🐍 {Math.round(length)} m</span><span className={`pill ${lead > 80 ? 'warn' : ''}`}>náskok {lead} m</span><span className="pill">🍓 {berries}</span><span className="pill">💥 {kills}</span></>}{sim && <span className="pill active">Simulace: klikni do mapy</span>}<Link className="pill link" to="/lobby">← lobby</Link>{error && <span className="pill warn">{error}</span>}</div>
+    <div className="hud"><span><b>KSMF Snake</b></span>{phase !== 'waiting' && <span className="pill">⏱ {fmtTime(remaining)}</span>}{phase === 'live' && <><span className="pill">🐍 {Math.round(length)} m</span><span className={`pill ${lead > 80 ? 'warn' : ''}`}>náskok {lead} m</span><span className="pill">🍓 {berries}</span><span className={`pill ${activeBerries === 0 && berryPointCount > 0 ? 'warn' : ''}`}>jahůdky na mapě {activeBerries}/{berryPointCount}</span><span className="pill">💥 {kills}</span></>}{sim && <span className="pill active">Simulace: klikni do mapy</span>}<Link className="pill link" to="/lobby">← lobby</Link>{error && <span className="pill warn">{error}</span>}</div>
     <div className="zoom-ctrl"><button onClick={() => mapRef.current?.zoomIn()}>+</button><button onClick={() => mapRef.current?.zoomOut()}>−</button></div>
     {phase === 'waiting' && <div className="wait-banner">Můžeš začít kdekoliv v herní oblasti. Čeká se na spuštění hry.</div>}
     {phase === 'respawn' && <div className="wait-banner">💥 {explosion} {respawnMessage}</div>}
