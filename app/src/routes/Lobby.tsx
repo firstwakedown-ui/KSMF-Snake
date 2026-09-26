@@ -8,13 +8,13 @@ import Spectate from '../admin/Spectate'
 import InstallHint from './InstallHint'
 import { loadGameResults, type ResultRow } from '../lib/results'
 
-type LobbyGame = { game_id: string; plan_id: string; plan_name: string | null; capacity: number; joined: number; mine: boolean; my_start: string | null; status: string; alive: boolean | null }
+type LobbyGame = { game_id: string; game_name: string; plan_id: string; plan_name: string | null; capacity: number; joined: number; mine: boolean; my_start: string | null; status: string; alive: boolean | null }
 
 export default function Lobby() {
   const nav = useNavigate()
   const player = getPlayer()
   const [games, setGames] = useState<LobbyGame[]>([])
-  const [myGames, setMyGames] = useState<{ game_id: string; plan_id: string; plan_name: string | null; place: number | null; finished_at: string | null }[]>([])
+  const [myGames, setMyGames] = useState<{ game_id: string; game_name: string; plan_id: string; plan_name: string | null; place: number | null; finished_at: string | null }[]>([])
   const [spectate, setSpectate] = useState<LobbyGame | null>(null)
   const [resultsModal, setResultsModal] = useState<{ name: string; rows: ResultRow[]; streets: [number, number][][] } | null>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -33,9 +33,9 @@ export default function Lobby() {
     setMyGames((mg ?? []) as any[])
     setLoading(false)
   }
-  const openResults = async (g: { game_id: string; plan_id: string; plan_name: string | null }) => {
+  const openResults = async (g: { game_id: string; game_name: string; plan_id: string; plan_name: string | null }) => {
     const { rows, streets } = await loadGameResults(g.game_id, g.plan_id)
-    setResultsModal({ name: g.plan_name ?? 'Hra', rows, streets })
+    setResultsModal({ name: g.game_name || g.plan_name || 'Hra', rows, streets })
   }
   useEffect(() => {
     load()
@@ -79,9 +79,9 @@ export default function Lobby() {
           return (
             <div key={g.game_id} className="lobby-card">
               <div className="lobby-card-main">
-                <b>{g.plan_name ?? 'Mapa'}</b>
+                <b>{g.game_name}</b>
                 <span className="muted">
-                  {g.joined}/{g.capacity} hráčů
+                  mapa {g.plan_name ?? '—'} · {g.joined}/{g.capacity} hráčů
                   {g.status === 'running' ? ' · 🟢 běží' : ''}
                 </span>
               </div>
@@ -110,7 +110,7 @@ export default function Lobby() {
           <ul className="row-list">
             {myGames.map((g) => (
               <li key={g.game_id}>
-                <span>{g.plan_name ?? '—'} <span className="muted">· {g.place ? g.place + '. místo' : '—'}{g.finished_at ? ' · ' + new Date(g.finished_at).toLocaleDateString('cs-CZ') : ''}</span></span>
+                <span><b>{g.game_name}</b> <span className="muted">· mapa {g.plan_name ?? '—'} · {g.place ? g.place + '. místo' : '—'}{g.finished_at ? ' · ' + new Date(g.finished_at).toLocaleDateString('cs-CZ') : ''}</span></span>
                 <button onClick={() => openResults(g)}>Výsledky</button>
               </li>
             ))}

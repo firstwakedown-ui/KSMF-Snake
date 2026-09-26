@@ -13,7 +13,7 @@ import VersionBadge from './VersionBadge'
 const START_COUNTDOWN_S = 10
 type Coord = [number, number]
 type Phase = 'loading' | 'none' | 'waiting' | 'countdown' | 'live' | 'respawn' | 'ended'
-type GameInfo = { game_id: string; plan_id: string; plan_name: string | null; status: string; started_at: string | null; sim: boolean; run_mode: boolean; game_duration_s?: number; max_lead_m?: number }
+type GameInfo = { game_id: string; game_name: string; plan_id: string; plan_name: string | null; status: string; started_at: string | null; sim: boolean; run_mode: boolean; game_duration_s?: number; max_lead_m?: number }
 type WorldRow = { player_id: string; nickname: string; active: boolean; body: { coordinates: Coord[] } | null; head: { coordinates: Coord } | null; current_length_m: number; max_length_m: number; strawberries_eaten: number; opponent_explosions: number }
 type RespawnPoint = { id: string; label: string; geom: { coordinates: Coord } }
 
@@ -52,7 +52,9 @@ export default function PlayerView() {
   const [explosion, setExplosion] = useState<string | null>(null)
   const [results, setResults] = useState<WorldRow[]>([])
   const [sim, setSim] = useState(false)
+  const [gameName, setGameName] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [snapWarning, setSnapWarning] = useState<string | null>(null)
 
   useEffect(() => { if (!playerRef.current) nav('/', { replace: true }) }, [nav])
 
@@ -167,6 +169,7 @@ export default function PlayerView() {
       const { data } = await supabase.rpc('current_game', { p_player: me.id }); const g = (Array.isArray(data) ? data[0] : data) as GameInfo | undefined
       if (!g?.game_id) { if (gameRef.current) await finish(gameRef.current.game_id); else setPhase('none'); return }
       gameRef.current = g
+      setGameName(g.game_name || g.plan_name || 'KSMF Snake')
       if (initializedGame !== g.game_id && readyRef.current) { initializedGame = g.game_id; await loadMap(g.plan_id) }
       // Režim simulace určuje admin při založení hry. Hráč ho proto nemusí zapínat ručně.
       if (initializedGame === g.game_id) {
@@ -231,6 +234,9 @@ export default function PlayerView() {
         return
       }
       const { data, error: e } = await supabase.rpc('snake_tick', { p_game: g.game_id, p_player: me.id, p_lng: pos[0], p_lat: pos[1] }); if (e) { setError(e.message); return }
+      setSnapWarning(data?.snap_rejected || data?.status === 'off_network'
+        ? 'Mimo povolenou cestu nebo příliš velký skok. V simulaci klikej po ulici po kratších úsecích.'
+        : null)
       if (data?.status === 'exploded') {
         const labels: Record<string, string> = { too_far: 'Utekl jsi hadovi příliš daleko.', caught: 'Had tě dohnal.', self_collision: 'Narazil jsi do vlastního těla.', collision: 'Narazil jsi do soupeřova hada.' }
         setExplosion(labels[data.reason] ?? 'Had vybuchl.')
@@ -249,8 +255,9 @@ export default function PlayerView() {
 
   const fmtTime = (s: number | null) => s == null ? '—' : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
   return <><div id="map" /><VersionBadge />
-    <div className="hud"><span><b>KSMF Snake</b></span>{phase !== 'waiting' && <span className="pill">⏱ {fmtTime(remaining)}</span>}{phase === 'live' && <><span className="pill">🐍 {Math.round(length)} m</span><span className={`pill ${lead > 80 ? 'warn' : ''}`}>náskok {lead} m</span><span className="pill">🍓 {berries}</span><span className={`pill ${activeBerries === 0 && berryPointCount > 0 ? 'warn' : ''}`}>jahůdky na mapě {activeBerries}/{berryPointCount}</span><span className="pill">💥 {kills}</span></>}{sim && <span className="pill active">Simulace: klikni do mapy</span>}<Link className="pill link" to="/lobby">← lobby</Link>{error && <span className="pill warn">{error}</span>}</div>
+    <div className="hud"><span><b>{gameName || 'KSMF Snake'}</b></span>{phase !== 'waiting' && <span className="pill">⏱ {fmtTime(remaining)}</span>}{phase === 'live' && <><span className="pill">🐍 {Math.round(length)} m</span><span className={`pill ${lead > 80 ? 'warn' : ''}`}>náskok {lead} m</span><span className="pill">🍓 {berries}</span><span className={`pill ${activeBerries === 0 && berryPointCount > 0 ? 'warn' : ''}`}>jahůdky na mapě {activeBerries}/{berryPointCount}</span><span className="pill">💥 {kills}</span></>}{sim && <span className="pill active">Simulace: klikni do mapy</span>}<Link className="pill link" to="/lobby">← lobby</Link>{error && <span className="pill warn">{error}</span>}</div>
     <div className="zoom-ctrl"><button onClick={() => mapRef.current?.zoomIn()}>+</button><button onClick={() => mapRef.current?.zoomOut()}>−</button></div>
+    {snapWarning && phase === 'live' && <div className="wait-banner">⚠️ {snapWarning}</div>}
     {phase === 'waiting' && <div className="wait-banner">Můžeš začít kdekoliv v herní oblasti. Čeká se na spuštění hry.</div>}
     {phase === 'respawn' && <div className="wait-banner">💥 {explosion} {respawnMessage}</div>}
     {(phase === 'none' || phase === 'countdown' || phase === 'ended') && <div className="game-overlay"><div className="game-card">

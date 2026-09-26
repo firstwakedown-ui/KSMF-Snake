@@ -19,6 +19,7 @@ declare
   body_start numeric; head_frac numeric; hit uuid; berry uuid; now_ts timestamptz:=clock_timestamp(); reason text;
   collision_m numeric; self_skip_m numeric; body_length_m numeric;
   old_head_distance_m numeric; head_advance_m numeric; target_length numeric; tail_distance numeric;
+  segment geometry; snap_ok boolean:=true;
 begin
   perform assert_player(p_player);
   select * into g from games where id=p_game for update;
@@ -33,12 +34,21 @@ begin
   select ST_ClosestPoint(e.geom,raw) into snapped from street_edges e
     where e.match_id=g.plan_id and e.enabled and ST_DWithin(e.geom::geography,raw::geography,coalesce(g.snap_tolerance_m,30))
     order by e.geom <-> raw limit 1;
-  if snapped is null then snapped:=raw; end if;
-
   if not s.active then
-    update snake_states set route=null,body=null,head_pos=null,player_pos=snapped,updated_at=now_ts
+    update snake_states set route=null,body=null,head_pos=null,player_pos=raw,updated_at=now_ts
       where game_id=p_game and player_id=p_player;
     return jsonb_build_object('status','respawn','respawn_started_at',s.respawn_started_at);
+  end if;
+
+  -- Do trasy se nikdy nesmí propsat syrová GPS poloha mimo povolenou síť.
+  -- Při ztrátě snapu ponecháme hráče na posledním platném bodě; hlava hada
+  -- může dál postupovat po již připravené trase.
+  if snapped is null then
+    if s.route is null or s.player_pos is null then
+      return jsonb_build_object('status','off_network','snap_rejected',true);
+    end if;
+    snapped:=s.player_pos;
+    snap_ok:=false;
   end if;
 
   if s.route is null then
@@ -47,7 +57,28 @@ begin
       where game_id=p_game and player_id=p_player;
     return jsonb_build_object('status','live','lead_m',0,'length_m',s.current_length_m);
   elsif s.player_pos is null or ST_Distance(s.player_pos::geography,snapped::geography)>=1 then
-    s.route:=ST_AddPoint(s.route,snapped);
+    segment:=ST_MakeLine(s.player_pos,snapped);
+
+    -- Samotný snap obou konců nestačí: přímka mezi nimi by mohla přeskočit
+    -- přes blok domů nebo na paralelní ulici. Přijmeme jen krátký krok, který
+    -- celý leží v koridoru povolených hran uliční sítě.
+    if ST_Length(segment::geography)>35 then
+      snap_ok:=false;
+    else
+      select coalesce(
+        ST_CoveredBy(segment,ST_Buffer(ST_Collect(e.geom)::geography,8)::geometry),
+        false
+      ) into snap_ok
+      from street_edges e
+      where e.match_id=g.plan_id and e.enabled
+        and ST_DWithin(e.geom::geography,segment::geography,15);
+    end if;
+
+    if snap_ok then
+      s.route:=ST_AddPoint(s.route,snapped);
+    else
+      snapped:=s.player_pos;
+    end if;
   end if;
 
   total:=ST_Length(s.route::geography);
@@ -117,7 +148,8 @@ begin
     strawberries_eaten=s.strawberries_eaten,last_tick_at=now_ts,updated_at=now_ts
     where game_id=p_game and player_id=p_player;
   return jsonb_build_object('status','live','lead_m',greatest(0,total-s.head_distance_m),
-    'length_m',s.current_length_m,'target_length_m',target_length,'ate',berry is not null);
+    'length_m',s.current_length_m,'target_length_m',target_length,'ate',berry is not null,
+    'snap_rejected',not snap_ok);
 end $$;
 
 create or replace function public.snake_respawn(p_game uuid,p_player uuid,p_point uuid,p_lng double precision,p_lat double precision)

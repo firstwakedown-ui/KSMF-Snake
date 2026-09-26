@@ -42,9 +42,9 @@ type Match = {
 type Plan = { id: string; name: string | null; is_active: boolean }
 type Code = { id: string; code: string; active: boolean }
 type Account = { id: string; nickname: string; created_at: string }
-type Game = { game_id: string; plan_id: string; plan_name: string | null; status: string; capacity: number; joined: number; sim: boolean; run_mode: boolean }
+type Game = { game_id: string; game_name: string; plan_id: string; plan_name: string | null; status: string; capacity: number; joined: number; sim: boolean; run_mode: boolean }
 type GameMode = 'realtime' | 'sim' | 'run'
-type FinishedGame = { game_id: string; plan_id: string; plan_name: string | null; players: number; started_at: string | null; finished_at: string | null }
+type FinishedGame = { game_id: string; game_name: string; plan_id: string; plan_name: string | null; players: number; started_at: string | null; finished_at: string | null }
 type ReadyPlan = { id: string; name: string | null; starts: number }
 type Edge = { id: number; name: string | null; enabled: boolean; is_foot: boolean; geom: any }
 type Start = { id: string; label: string; coord: [number, number] }
@@ -95,6 +95,7 @@ function AdminBoard() {
   const [finished, setFinished] = useState<FinishedGame[]>([])
   const [readyPlans, setReadyPlans] = useState<ReadyPlan[]>([])
   const [newGamePlan, setNewGamePlan] = useState('')
+  const [newGameName, setNewGameName] = useState('')
   const [newGameCap, setNewGameCap] = useState(5)
   const [newGameMode, setNewGameMode] = useState<GameMode>('realtime')
   const [spectate, setSpectate] = useState<Game | null>(null)
@@ -787,10 +788,11 @@ function AdminBoard() {
     if (!newGamePlan) { setError('Vyber plán.'); return }
     const { error: e } = await supabase!.rpc('create_game', {
       p_plan: newGamePlan, p_capacity: newGameCap,
-      p_sim: newGameMode === 'sim', p_run: newGameMode === 'run',
+      p_sim: newGameMode === 'sim', p_run: newGameMode === 'run', p_name: newGameName,
     })
     if (e) { setError(`Nová hra: ${e.message}`); return }
     await loadGames()
+    setNewGameName('')
     const modeLabel = newGameMode === 'sim' ? ' (simulace – klikání)' : newGameMode === 'run' ? ' (Run hra – joystick)' : ''
     setStatus(`Hra založena a je v lobby${modeLabel} – hráči se můžou připojit.`)
   }
@@ -810,7 +812,7 @@ function AdminBoard() {
   }
   const showResults = async (g: FinishedGame) => {
     const { rows, streets } = await loadGameResults(g.game_id, g.plan_id)
-    setResultsModal({ name: g.plan_name ?? 'Hra', rows, streets })
+    setResultsModal({ name: g.game_name || g.plan_name || 'Hra', rows, streets })
   }
   const deleteGame = async (gameId: string, msg: string) => {
     if (!window.confirm(msg)) return
@@ -974,6 +976,7 @@ function AdminBoard() {
               <h2>Hry</h2>
               <p className="muted">Založ hru z plánu připraveného ke hře a zadej počet hráčů (≤ počet startů).</p>
               <div className="gameform">
+                <input value={newGameName} onChange={(e) => setNewGameName(e.target.value)} placeholder="Název hry" maxLength={80} />
                 <select value={newGamePlan} onChange={(e) => setNewGamePlan(e.target.value)}>
                   <option value="">— vyber plán —</option>
                   {readyPlans.map((p) => (
@@ -993,8 +996,8 @@ function AdminBoard() {
                 {games.map((g) => (
                   <li key={g.game_id}>
                     <span>
-                      {g.plan_name ?? '—'} {g.sim && <span title="simulace (klikání)">🧪</span>}{g.run_mode && <span title="Run hra (joystick)">🏃</span>}{' '}
-                      <span className="muted">· {g.joined}/{g.capacity} · {g.status === 'lobby' ? 'v lobby' : 'běží'} · #{g.game_id.slice(0, 4)}</span>
+                      <b>{g.game_name}</b> {g.sim && <span title="simulace (klikání)">🧪</span>}{g.run_mode && <span title="Run hra (joystick)">🏃</span>}{' '}
+                      <span className="muted">· mapa {g.plan_name ?? '—'} · {g.joined}/{g.capacity} · {g.status === 'lobby' ? 'v lobby' : 'běží'} · #{g.game_id.slice(0, 4)}</span>
                     </span>
                     <span className="row-actions">
                       <button className="ghost" onClick={() => setSpectate(g)}>Sleduj</button>
@@ -1014,7 +1017,7 @@ function AdminBoard() {
               <ul className="row-list scroll">
                 {finished.map((g) => (
                   <li key={g.game_id}>
-                    <span>{g.plan_name ?? '—'} <span className="muted">· {g.players} hráčů{g.finished_at ? ' · ' + new Date(g.finished_at).toLocaleString('cs-CZ') : ''}</span></span>
+                    <span><b>{g.game_name}</b> <span className="muted">· mapa {g.plan_name ?? '—'} · {g.players} hráčů{g.finished_at ? ' · ' + new Date(g.finished_at).toLocaleString('cs-CZ') : ''}</span></span>
                     <span className="row-actions">
                       <button onClick={() => showResults(g)}>Výsledky</button>
                       <button className="danger" onClick={() => deleteGame(g.game_id, 'Smazat tuhle hru z historie?')}>smazat</button>
