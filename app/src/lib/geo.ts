@@ -13,7 +13,7 @@ export const BARRANDOV_BBOX: [[number, number], [number, number]] = [
 export const MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty'
 
 // Verze aplikace (odpovídá etapě deníku) – zobrazená v rohu. Bumpovat při větších změnách.
-export const APP_VERSION = 'v2.5.1-snake'
+export const APP_VERSION = 'v2.6-snake'
 
 // Zapíše data do GeoJSON zdroje mapy (centralizuje opakovaný `as GeoJSONSource` cast).
 // Bezpečné i když mapa/zdroj ještě neexistují (no-op).
