@@ -69,13 +69,13 @@ export default function PlayerView() {
       respawnMarkersRef.current = []
       return
     }
-    setSourceData(map, 'respawns', fc(respawnsRef.current.map((r) => pointFeature(r.geom.coordinates, { id: r.id, label: r.label, selected: selectedRespawnRef.current === r.id }))))
+    setSourceData(map, 'respawns', fc(respawnsRef.current.map((r) => pointFeature(r.geom.coordinates, { id: r.id, label: '', selected: selectedRespawnRef.current === r.id }))))
     respawnMarkersRef.current.forEach((marker) => marker.remove())
     respawnMarkersRef.current = respawnsRef.current.map((r) => {
       const selected = selectedRespawnRef.current === r.id
       const el = document.createElement('button')
       el.type = 'button'
-      el.textContent = `↻ ${r.label}`
+      el.textContent = '↻'
       el.title = `Respawn ${r.label}`
       Object.assign(el.style, { background: selected ? '#3fb950' : '#1769aa', color: '#fff', border: '2px solid #fff', borderRadius: '16px', padding: '5px 8px', fontWeight: '700', boxShadow: '0 1px 5px #0008', cursor: phaseRef.current === 'respawn' ? 'pointer' : 'default', whiteSpace: 'nowrap' })
       el.addEventListener('click', (event) => {

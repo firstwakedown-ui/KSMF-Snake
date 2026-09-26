@@ -83,7 +83,7 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
     planMarkersRef.current = []
     for (const point of respawns ?? []) {
       const el = document.createElement('div')
-      el.textContent = `↻ ${(point as any).label ?? 'R'}`
+      el.textContent = '↻'
       el.title = 'Respawn bod'
       Object.assign(el.style, { background: '#1769aa', color: '#fff', border: '2px solid #fff', borderRadius: '16px', padding: '5px 8px', fontWeight: '700', boxShadow: '0 1px 5px #0008', whiteSpace: 'nowrap' })
       planMarkersRef.current.push(new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat((point as any).geom.coordinates).addTo(map))
