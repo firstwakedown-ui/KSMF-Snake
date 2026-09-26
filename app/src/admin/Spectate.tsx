@@ -4,14 +4,11 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import { bbox as turfBbox } from '@turf/turf'
 import { supabase } from '../lib/supabase'
 import { MAP_STYLE, BARRANDOV, BARRANDOV_BBOX, emptyFC, setSourceData } from '../lib/geo'
-import { startMarkerEl } from '../lib/startMarker'
 import { assignColors, colorFor } from '../lib/players'
-import { haversineM, trailLenM } from '../lib/collision'
+import { trailLenM } from '../lib/collision'
 import type { Feature } from 'geojson'
 
-const AT_START_M = 25 // do tolik metrů od svého startu = „na startu"
-
-type RosterRow = { player_id: string; nickname: string; start_lng: number | null; start_lat: number | null; start_label: string | null }
+type RosterRow = { player_id: string; nickname: string }
 type P = { nick: string; trail: [number, number][]; pos: [number, number] | null; lastSeen: number; eliminated?: boolean }
 
 export default function Spectate({ gameId, planId, status: status0, onClose, onChanged, readOnly }: {
@@ -56,12 +53,7 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
     const fc = { type: 'FeatureCollection' as const, features: (edges ?? []).map((r: any) => ({ type: 'Feature' as const, geometry: r.geom, properties: {} })) }
     setSourceData(map, 'streets', fc as any)
     if (fc.features.length) { const [w, s, e, n] = turfBbox(fc as any); map.fitBounds([[w, s], [e, n]], { padding: 30, duration: 0 }) }
-    // Všechny startovní body plánu (praporky) – ať admin vidí rozmístění i bez připojených.
-    const { data: sp } = await supabase!.from('start_points').select('label,geom').eq('match_id', planId)
-    for (const s of sp ?? []) {
-      new maplibregl.Marker({ element: startMarkerEl((s as any).label ?? '') }).setLngLat((s as any).geom.coordinates).addTo(map)
-    }
-    // Roster (pro barvy a kontrolu „kdo je na startu").
+    // Roster určuje barvy a jména. Ve Snake už nejsou povinné startovní body.
     const { data: r } = await supabase!.rpc('game_roster', { p_game: gameId })
     const rows = (r ?? []) as RosterRow[]
     setRoster(rows)
@@ -120,19 +112,10 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
       }
     })
     setSourceData(map, 'ptrails', { type: 'FeatureCollection', features: trails })
-    force((n) => n + 1) // překresli seznam (stav „na startu")
-  }
-
-  // Je hráč u svého startu?
-  const atStart = (x: RosterRow): boolean | null => {
-    const p = playersRef.current.get(x.player_id)
-    if (!p?.pos || x.start_lng == null || x.start_lat == null) return null
-    return haversineM(p.pos, [x.start_lng, x.start_lat]) <= AT_START_M
+    force((n) => n + 1)
   }
 
   const start = async () => {
-    const notReady = roster.filter((x) => atStart(x) !== true).map((x) => x.nickname)
-    if (notReady.length && !window.confirm(`Na startu ještě není: ${notReady.join(', ')}.\nOpravdu spustit hru?`)) return
     const { error } = await supabase!.rpc('run_game', { p_game: gameId })
     if (error) return
     setStatus('running')
@@ -154,10 +137,10 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
       </div>
       <div className="spectate-roster">
         {roster.map((x) => {
-          const a = atStart(x)
+          const hasPosition = Boolean(playersRef.current.get(x.player_id)?.pos)
           return (
-            <span key={x.player_id} className={`pill ${a === true ? 'ok' : a === false ? 'warn' : ''}`}>
-              {x.nickname} {a === true ? '✓ na startu' : a === false ? '✗ nedošel' : '· ?'}
+            <span key={x.player_id} className={`pill ${hasPosition ? 'ok' : 'warn'}`}>
+              {x.nickname} {hasPosition ? '● poloha přijata' : '· čeká na polohu'}
             </span>
           )
         })}

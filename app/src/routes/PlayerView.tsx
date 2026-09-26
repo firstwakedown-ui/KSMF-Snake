@@ -31,6 +31,8 @@ export default function PlayerView() {
   const selectedRespawnRef = useRef<string | null>(null)
   const colorsRef = useRef(new Map<string, string>())
   const simRef = useRef(false)
+  const positionChannelRef = useRef<ReturnType<NonNullable<typeof supabase>['channel']> | null>(null)
+  const positionChannelGameRef = useRef('')
   const phaseRef = useRef<Phase>('loading')
   const [phase, setPhaseState] = useState<Phase>('loading')
   const setPhase = (p: Phase) => { phaseRef.current = p; setPhaseState(p) }
@@ -107,6 +109,11 @@ export default function PlayerView() {
       if (!g?.game_id) { if (gameRef.current) await finish(gameRef.current.game_id); else setPhase('none'); return }
       gameRef.current = g
       if (initializedGame !== g.game_id && readyRef.current) { initializedGame = g.game_id; await loadMap(g.plan_id) }
+      // Režim simulace určuje admin při založení hry. Hráč ho proto nemusí zapínat ručně.
+      if (initializedGame === g.game_id) {
+        simRef.current = Boolean(g.sim)
+        setSim(Boolean(g.sim))
+      }
       if (g.status === 'lobby' || !g.started_at) { setPhase('waiting'); return }
       const elapsed = (Date.now() - new Date(g.started_at).getTime()) / 1000
       if (elapsed < START_COUNTDOWN_S) { setPhase('countdown'); setCountdown(Math.max(1, Math.ceil(START_COUNTDOWN_S - elapsed))); return }
@@ -115,6 +122,35 @@ export default function PlayerView() {
       if (phaseRef.current !== 'respawn') setPhase('live'); await refreshWorld()
     }
     poll(); const id = setInterval(poll, 1000); return () => clearInterval(id)
+  }, [])
+
+  // Před startem ani v simulaci ještě neběží snake_tick, proto adminovi pravidelně
+  // vysíláme skutečnou/kliknutou polohu přímo do stejného kanálu jako živá mapa.
+  useEffect(() => {
+    const publish = async () => {
+      const game = gameRef.current
+      const me = playerRef.current
+      const pos = posRef.current
+      if (!game || !me || !pos || !supabase) return
+      if (positionChannelGameRef.current !== game.game_id) {
+        if (positionChannelRef.current) await supabase.removeChannel(positionChannelRef.current)
+        const channel = supabase.channel(`game-${game.game_id}`)
+        channel.subscribe()
+        positionChannelRef.current = channel
+        positionChannelGameRef.current = game.game_id
+      }
+      await positionChannelRef.current?.send({
+        type: 'broadcast', event: 'pos',
+        payload: { id: me.id, nick: me.nickname, pos, live: game.status === 'running' },
+      })
+    }
+    const id = window.setInterval(() => { void publish() }, 1000)
+    return () => {
+      window.clearInterval(id)
+      if (positionChannelRef.current) void supabase?.removeChannel(positionChannelRef.current)
+      positionChannelRef.current = null
+      positionChannelGameRef.current = ''
+    }
   }, [])
 
   useEffect(() => {
@@ -144,10 +180,9 @@ export default function PlayerView() {
     const id = setInterval(tick, 500); return () => clearInterval(id)
   }, [])
 
-  const toggleSim = () => { simRef.current = !simRef.current; setSim(simRef.current) }
   const fmtTime = (s: number | null) => s == null ? '—' : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
   return <><div id="map" /><VersionBadge />
-    <div className="hud"><span><b>KSMF Snake</b></span>{phase === 'live' && <><span className="pill">⏱ {fmtTime(remaining)}</span><span className="pill">🐍 {Math.round(length)} m</span><span className={`pill ${lead > 80 ? 'warn' : ''}`}>náskok {lead} m</span><span className="pill">🍓 {berries}</span><span className="pill">💥 {kills}</span></>}<button className={`pill mode ${sim ? 'active' : ''}`} onClick={toggleSim}>🧪 sim</button><Link className="pill link" to="/lobby">← lobby</Link>{error && <span className="pill warn">{error}</span>}</div>
+    <div className="hud"><span><b>KSMF Snake</b></span>{phase === 'live' && <><span className="pill">⏱ {fmtTime(remaining)}</span><span className="pill">🐍 {Math.round(length)} m</span><span className={`pill ${lead > 80 ? 'warn' : ''}`}>náskok {lead} m</span><span className="pill">🍓 {berries}</span><span className="pill">💥 {kills}</span></>}{sim && <span className="pill active">Simulace: klikni do mapy</span>}<Link className="pill link" to="/lobby">← lobby</Link>{error && <span className="pill warn">{error}</span>}</div>
     <div className="zoom-ctrl"><button onClick={() => mapRef.current?.zoomIn()}>+</button><button onClick={() => mapRef.current?.zoomOut()}>−</button></div>
     {phase === 'waiting' && <div className="wait-banner">Můžeš začít kdekoliv v herní oblasti. Čeká se na spuštění hry.</div>}
     {phase === 'respawn' && <div className="wait-banner">💥 {explosion} {respawnMessage}</div>}
