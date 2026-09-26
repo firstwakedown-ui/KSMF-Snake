@@ -10,6 +10,7 @@ import type { Feature } from 'geojson'
 
 type RosterRow = { player_id: string; nickname: string }
 type P = { nick: string; trail: [number, number][]; pos: [number, number] | null; lastSeen: number; eliminated?: boolean }
+type SnakeWorldRow = { player_id: string; nickname: string; active: boolean; body: { coordinates: [number, number][] } | null; head: { coordinates: [number, number] } | null }
 
 export default function Spectate({ gameId, planId, status: status0, onClose, onChanged, readOnly }: {
   gameId: string; planId: string; status: string; onClose: () => void; onChanged?: () => void; readOnly?: boolean
@@ -43,7 +44,8 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
       const { data } = await supabase!.from('games').select('status').eq('id', gameId).single()
       if (data?.status) setStatus(data.status)
     }, 3000)
-    return () => { clearInterval(statusPoll); if (channelRef.current) supabase?.removeChannel(channelRef.current); planMarkersRef.current.forEach((marker) => marker.remove()); map.remove() }
+    const worldPoll = setInterval(() => { void refreshSnakeWorld() }, 750)
+    return () => { clearInterval(statusPoll); clearInterval(worldPoll); if (channelRef.current) supabase?.removeChannel(channelRef.current); planMarkersRef.current.forEach((marker) => marker.remove()); map.remove() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -80,34 +82,41 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
     const rows = (r ?? []) as RosterRow[]
     setRoster(rows)
     colorRef.current = assignColors(rows.map((x) => x.player_id))
-    // Načti už uložené stopy (à 2 s na server) → divák vidí celou stopu od začátku, ne jen od připojení.
-    const { data: saved } = await supabase!.from('game_players').select('player_id, trail').eq('game_id', gameId)
-    for (const s of (saved ?? []) as any[]) {
-      if (Array.isArray(s.trail) && s.trail.length) {
-        const nick = rows.find((x) => x.player_id === s.player_id)?.nickname ?? '?'
-        playersRef.current.set(s.player_id, { nick, trail: s.trail, pos: s.trail[s.trail.length - 1], lastSeen: 0 })
-      }
-    }
+    await refreshSnakeWorld()
     renderPlayers()
-    // Realtime příjem poloh.
+    // Realtime příjem fyzické/kliknuté polohy slouží hlavně před startem.
+    // Během hry se tělo i hlava berou autoritativně ze snake_world.
     const ch = supabase!.channel(`game-${gameId}`)
     ch.on('broadcast', { event: 'pos' }, ({ payload }: any) => {
       if (!payload?.id) return
       let p = playersRef.current.get(payload.id)
       if (!p) { p = { nick: payload.nick ?? '?', trail: [], pos: null, lastSeen: 0 }; playersRef.current.set(payload.id, p) }
       p.pos = payload.pos; p.lastSeen = Date.now()
-      if (payload.live && payload.pos && !p.eliminated) {
-        const last = p.trail[p.trail.length - 1]
-        if (!last || last[0] !== payload.pos[0] || last[1] !== payload.pos[1]) p.trail.push(payload.pos)
-      }
       renderPlayers()
     })
     ch.on('broadcast', { event: 'eliminated' }, ({ payload }: any) => {
       const p = playersRef.current.get(payload?.id)
-      if (p) { p.eliminated = true; if (Array.isArray(payload.trail)) p.trail = payload.trail; renderPlayers() }
+      if (p) { p.eliminated = true; p.trail = []; renderPlayers() }
     })
     ch.subscribe()
     channelRef.current = ch
+  }
+
+  const refreshSnakeWorld = async () => {
+    if (!supabase || !mapRef.current) return
+    const { data } = await supabase.rpc('snake_world', { p_game: gameId })
+    for (const row of (data ?? []) as SnakeWorldRow[]) {
+      let player = playersRef.current.get(row.player_id)
+      if (!player) {
+        player = { nick: row.nickname, trail: [], pos: null, lastSeen: 0 }
+        playersRef.current.set(row.player_id, player)
+      }
+      player.nick = row.nickname
+      player.eliminated = !row.active
+      player.trail = row.active && row.body?.coordinates?.length ? row.body.coordinates : []
+      if (row.active && row.head?.coordinates) player.pos = row.head.coordinates
+    }
+    renderPlayers()
   }
 
   const renderPlayers = () => {
