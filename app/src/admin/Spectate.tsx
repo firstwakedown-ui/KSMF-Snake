@@ -23,6 +23,7 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
   const channelRef = useRef<ReturnType<NonNullable<typeof supabase>['channel']> | null>(null)
   const [roster, setRoster] = useState<RosterRow[]>([])
   const [status, setStatus] = useState(status0)
+  const [remaining, setRemaining] = useState<number | null>(null)
   const [, force] = useState(0)
 
   useEffect(() => {
@@ -39,11 +40,21 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
       map.fitBounds(BARRANDOV_BBOX, { padding: 30, duration: 0 })
       loadAll(map)
     })
-    // Sleduj stav hry (divák uvidí přechod lobby → běží → skončila).
-    const statusPoll = setInterval(async () => {
-      const { data } = await supabase!.from('games').select('status').eq('id', gameId).single()
-      if (data?.status) setStatus(data.status)
-    }, 3000)
+    // Stejný serverový odpočet jako v adminském seznamu. RPC zároveň
+    // autoritativně dokončí hru, jakmile čas vyprší.
+    const refreshStatus = async () => {
+      const { data } = await supabase!.rpc('active_games')
+      const game = (data ?? []).find((row: any) => row.game_id === gameId)
+      if (game) {
+        setStatus(game.status)
+        setRemaining(game.status === 'running' ? Number(game.remaining_s ?? 0) : null)
+      } else {
+        setStatus('finished')
+        setRemaining(null)
+      }
+    }
+    void refreshStatus()
+    const statusPoll = setInterval(refreshStatus, 1000)
     const worldPoll = setInterval(() => { void refreshSnakeWorld() }, 750)
     return () => { clearInterval(statusPoll); clearInterval(worldPoll); if (channelRef.current) supabase?.removeChannel(channelRef.current); planMarkersRef.current.forEach((marker) => marker.remove()); map.remove() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -161,11 +172,13 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
     onChanged?.()
   }
 
+  const fmtTime = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
+
   return (
     <div className="spectate">
       <div className="spectate-bar">
         <b>{readOnly ? '👁️ Divák' : 'Sleduj hru'}</b>
-        <span className="muted">{status === 'lobby' ? 'čeká v lobby' : status === 'finished' ? 'skončila' : 'běží'}</span>
+        <span className="muted">{status === 'lobby' ? 'čeká v lobby' : status === 'finished' ? 'skončila' : `běží · zbývá ${fmtTime(remaining ?? 0)}`}</span>
         {status === 'lobby' && !readOnly && <button onClick={start}>Spustit hru</button>}
         {status === 'running' && !readOnly && <button className="danger" onClick={finish}>Ukončit hru</button>}
         <button className="ghost" onClick={onClose}>Zavřít</button>
