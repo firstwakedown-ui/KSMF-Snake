@@ -59,6 +59,12 @@ export default function PlayerView() {
   const renderRespawns = () => {
     const map = mapRef.current
     if (!map) return
+    if (phaseRef.current !== 'respawn') {
+      setSourceData(map, 'respawns', emptyFC())
+      respawnMarkersRef.current.forEach((marker) => marker.remove())
+      respawnMarkersRef.current = []
+      return
+    }
     setSourceData(map, 'respawns', fc(respawnsRef.current.map((r) => pointFeature(r.geom.coordinates, { id: r.id, label: r.label, selected: selectedRespawnRef.current === r.id }))))
     respawnMarkersRef.current.forEach((marker) => marker.remove())
     respawnMarkersRef.current = respawnsRef.current.map((r) => {
@@ -123,7 +129,6 @@ export default function PlayerView() {
     setSourceData(mapRef.current, 'streets', fc(features))
     respawnsRef.current = (respawns ?? []) as RespawnPoint[]
     setRespawns(respawnsRef.current)
-    renderRespawns()
     setBerryPointCount((berryPoints ?? []).length)
     if (features.length) { const [w, s, e, n] = turfBbox(fc(features)); mapRef.current?.fitBounds([[w, s], [e, n]], { padding: 40, duration: 0 }) }
   }
@@ -150,7 +155,7 @@ export default function PlayerView() {
     setLength(Number(mine.current_length_m ?? 10)); setBerries(mine.strawberries_eaten ?? 0); setKills(mine.opponent_explosions ?? 0)
     const route = mine.route?.coordinates as Coord[] | undefined, head = mine.head_pos?.coordinates as Coord | undefined
     setSourceData(mapRef.current, 'future', route?.length && head ? fc([lineFeature(route)]) : emptyFC())
-    if (!mine.active && phaseRef.current !== 'ended') setPhase('respawn')
+    if (!mine.active && phaseRef.current !== 'ended') { setPhase('respawn'); renderRespawns() }
   }
 
   const finish = async (gameId: string) => { const { data } = await supabase!.rpc('snake_world', { p_game: gameId }); setResults((data ?? []) as WorldRow[]); setPhase('ended') }
@@ -222,11 +227,19 @@ export default function PlayerView() {
         const { data, error: e } = await supabase.rpc('snake_respawn', { p_game: g.game_id, p_player: me.id, p_point: pointId, p_lng: pos[0], p_lat: pos[1] }); if (e) { setError(e.message); return }
         if (data?.status === 'approaching') setRespawnMessage(`Dojdi k vybranému bodu — ${data.distance_m} m`)
         if (data?.status === 'countdown') setRespawnMessage(`Vracíš se do hry — ${data.seconds}`)
-        if (data?.status === 'live') { selectedRespawnRef.current = null; renderRespawns(); setExplosion(null); setPhase('live') }
+        if (data?.status === 'live') { selectedRespawnRef.current = null; setExplosion(null); setPhase('live'); renderRespawns() }
         return
       }
       const { data, error: e } = await supabase.rpc('snake_tick', { p_game: g.game_id, p_player: me.id, p_lng: pos[0], p_lat: pos[1] }); if (e) { setError(e.message); return }
-      if (data?.status === 'exploded') { const labels: Record<string, string> = { too_far: 'Utekl jsi hadovi příliš daleko.', caught: 'Had tě dohnal.', self_collision: 'Narazil jsi do vlastního těla.', collision: 'Narazil jsi do soupeřova hada.' }; setExplosion(labels[data.reason] ?? 'Had vybuchl.'); setRespawnMessage('Vyber si respawn bod a dojdi k němu.'); setPhase('respawn') }
+      if (data?.status === 'exploded') {
+        const labels: Record<string, string> = { too_far: 'Utekl jsi hadovi příliš daleko.', caught: 'Had tě dohnal.', self_collision: 'Narazil jsi do vlastního těla.', collision: 'Narazil jsi do soupeřova hada.' }
+        setExplosion(labels[data.reason] ?? 'Had vybuchl.')
+        setRespawnMessage('Vyber si respawn bod a dojdi k němu.')
+        setSourceData(mapRef.current, 'my-body', emptyFC())
+        setSourceData(mapRef.current, 'future', emptyFC())
+        setPhase('respawn')
+        renderRespawns()
+      }
       else if (data?.status === 'ended') await finish(g.game_id)
       else { setLead(Math.round(Number(data?.lead_m ?? 0))); setLength(Number(data?.length_m ?? 10)) }
       await refreshWorld()
