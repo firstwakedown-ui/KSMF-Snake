@@ -75,7 +75,7 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
       el.textContent = '🍓'
       el.title = 'Možný spawn jahůdky'
       Object.assign(el.style, { fontSize: '24px', lineHeight: '26px', filter: 'grayscale(1) drop-shadow(0 1px 2px #000)', opacity: '0.9' })
-      planMarkersRef.current.push(new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat((point as any).geom.coordinates).addTo(map))
+      planMarkersRef.current.push(new maplibregl.Marker({ element: el, anchor: 'center' }).setLngLat((point as any).geom.coordinates).addTo(map))
     }
     // Roster určuje barvy a jména. Ve Snake už nejsou povinné startovní body.
     const { data: r } = await supabase!.rpc('game_roster', { p_game: gameId })

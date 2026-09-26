@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { bbox as turfBbox } from '@turf/turf'
+import { bbox as turfBbox, length as turfLength, lineSliceAlong, lineString } from '@turf/turf'
 import type { Feature } from 'geojson'
 import { supabase } from '../lib/supabase'
 import { getPlayer, type PlayerSession } from '../lib/session'
@@ -95,7 +95,7 @@ export default function PlayerView() {
       el.textContent = '🍓'
       el.title = 'Jahůdka - sebere ji hlava hada'
       Object.assign(el.style, { fontSize: '28px', lineHeight: '30px', filter: 'drop-shadow(0 1px 2px #000)', pointerEvents: 'none' })
-      return new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat([berry.lng, berry.lat]).addTo(map)
+      return new maplibregl.Marker({ element: el, anchor: 'center' }).setLngLat([berry.lng, berry.lat]).addTo(map)
     })
   }
 
@@ -140,7 +140,7 @@ export default function PlayerView() {
     if (!g || !me || !supabase || !readyRef.current) return
     const [{ data: world }, fruitResult, { data: mine }] = await Promise.all([
       supabase.rpc('snake_world', { p_game: g.game_id }), supabase.rpc('active_strawberries', { p_game: g.game_id }),
-      supabase.from('snake_states').select('route,head_pos,active,current_length_m,strawberries_eaten,opponent_explosions').eq('game_id', g.game_id).eq('player_id', me.id).maybeSingle(),
+      supabase.from('snake_states').select('route,head_pos,head_distance_m,active,current_length_m,strawberries_eaten,opponent_explosions').eq('game_id', g.game_id).eq('player_id', me.id).maybeSingle(),
     ])
     const rows = (world ?? []) as WorldRow[]; colorsRef.current = assignColors(rows.map((r) => r.player_id))
     const bodies = rows.filter((r) => r.active && r.body?.coordinates?.length)
@@ -155,8 +155,17 @@ export default function PlayerView() {
     renderBerries(fruit)
     if (!mine) return
     setLength(Number(mine.current_length_m ?? 10)); setBerries(mine.strawberries_eaten ?? 0); setKills(mine.opponent_explosions ?? 0)
-    const route = mine.route?.coordinates as Coord[] | undefined, head = mine.head_pos?.coordinates as Coord | undefined
-    setSourceData(mapRef.current, 'future', route?.length && head ? fc([lineFeature(route)]) : emptyFC())
+    const route = mine.route?.coordinates as Coord[] | undefined
+    // Hráč vidí pouze trasu, která hada teprve čeká. Projetá část za hlavou
+    // už není pro navigaci relevantní a zbytečně se pletla s tělem hada.
+    let future: Coord[] = []
+    if (route && route.length >= 2) {
+      const routeLine = lineString(route)
+      const totalKm = turfLength(routeLine, { units: 'kilometers' })
+      const headKm = Math.max(0, Number(mine.head_distance_m ?? 0) / 1000)
+      if (headKm < totalKm) future = lineSliceAlong(routeLine, Math.min(headKm, totalKm), totalKm, { units: 'kilometers' }).geometry.coordinates as Coord[]
+    }
+    setSourceData(mapRef.current, 'future', future.length >= 2 ? fc([lineFeature(future)]) : emptyFC())
     if (!mine.active && phaseRef.current !== 'ended') { setPhase('respawn'); renderRespawns() }
   }
 
