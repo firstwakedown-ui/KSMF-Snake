@@ -3,7 +3,7 @@ import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { bbox as turfBbox } from '@turf/turf'
 import { supabase } from '../lib/supabase'
-import { MAP_STYLE, BARRANDOV, BARRANDOV_BBOX, emptyFC, setSourceData } from '../lib/geo'
+import { MAP_STYLE, BARRANDOV, emptyFC, setSourceData } from '../lib/geo'
 import { assignColors, colorFor } from '../lib/players'
 import { trailLenM } from '../lib/collision'
 import type { Feature } from 'geojson'
@@ -26,6 +26,7 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
   const [roster, setRoster] = useState<RosterRow[]>([])
   const [status, setStatus] = useState(status0)
   const [remaining, setRemaining] = useState<number | null>(null)
+  const [mapReady, setMapReady] = useState(false)
   const [, force] = useState(0)
 
   useEffect(() => {
@@ -39,7 +40,6 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
       map.addSource('ppos', { type: 'geojson', data: emptyFC() })
       map.addLayer({ id: 'ppos-circle', type: 'circle', source: 'ppos', paint: { 'circle-radius': 7, 'circle-color': ['get', 'color'], 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } })
       map.addLayer({ id: 'ppos-label', type: 'symbol', source: 'ppos', layout: { 'text-field': ['get', 'nick'], 'text-size': 11, 'text-offset': [0, 1.2], 'text-allow-overlap': true }, paint: { 'text-color': '#fff', 'text-halo-color': '#0d1117', 'text-halo-width': 1.5 } })
-      map.fitBounds(BARRANDOV_BBOX, { padding: 30, duration: 0 })
       loadAll(map)
     })
     // Stejný serverový odpočet jako v adminském seznamu. RPC zároveň
@@ -73,6 +73,7 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
     const fc = { type: 'FeatureCollection' as const, features: (edges ?? []).map((r: any) => ({ type: 'Feature' as const, geometry: r.geom, properties: {} })) }
     setSourceData(map, 'streets', fc as any)
     if (fc.features.length) { const [w, s, e, n] = turfBbox(fc as any); map.fitBounds([[w, s], [e, n]], { padding: 30, duration: 0 }) }
+    setMapReady(true)
     // Admin vždy vidí všechny herní body - i skryté možné pozice jahůdek.
     const [{ data: respawns }, { data: berryPoints }] = await Promise.all([
       supabase!.from('respawn_points').select('label,geom').eq('match_id', planId),
@@ -210,7 +211,7 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
         {status === 'running' && !readOnly && <button className="danger" onClick={finish}>Ukončit hru</button>}
         <button className="ghost" onClick={onClose}>Zavřít</button>
       </div>
-      <div id="spectate-map" className="spectate-map" />
+      <div id="spectate-map" className="spectate-map" style={{ opacity: mapReady ? 1 : 0 }} />
       <div className="zoom-ctrl">
         <button onClick={() => mapRef.current?.zoomIn()} aria-label="Přiblížit">+</button>
         <button onClick={() => mapRef.current?.zoomOut()} aria-label="Oddálit">−</button>

@@ -7,7 +7,7 @@ import type { Feature } from 'geojson'
 import { supabase } from '../lib/supabase'
 import { getPlayer, type PlayerSession } from '../lib/session'
 import { assignColors } from '../lib/players'
-import { BARRANDOV, BARRANDOV_BBOX, MAP_STYLE, emptyFC, pointFC, setSourceData } from '../lib/geo'
+import { BARRANDOV, MAP_STYLE, emptyFC, pointFC, setSourceData } from '../lib/geo'
 import VersionBadge from './VersionBadge'
 
 const START_COUNTDOWN_S = 10
@@ -53,6 +53,7 @@ export default function PlayerView() {
   const [explosion, setExplosion] = useState<string | null>(null)
   const [results, setResults] = useState<WorldRow[]>([])
   const [sim, setSim] = useState(false)
+  const [mapReady, setMapReady] = useState(false)
   const [gameName, setGameName] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [snapWarning, setSnapWarning] = useState<string | null>(null)
@@ -117,7 +118,7 @@ export default function PlayerView() {
         if (simRef.current) { posRef.current = [e.lngLat.lng, e.lngLat.lat]; setSourceData(map, 'player', pointFC(posRef.current, true)) }
         if (phaseRef.current === 'respawn') { const hit = map.queryRenderedFeatures(e.point, { layers: ['respawns-circle'] })[0]; if (hit?.properties?.id) { selectedRespawnRef.current = hit.properties.id; renderRespawns() } }
       })
-      readyRef.current = true; map.fitBounds(BARRANDOV_BBOX, { padding: 40, duration: 0 })
+      readyRef.current = true
     })
     return () => { respawnMarkersRef.current.forEach((marker) => marker.remove()); berryMarkersRef.current.forEach((marker) => marker.remove()); map.remove() }
   }, [])
@@ -134,6 +135,7 @@ export default function PlayerView() {
     setRespawns(respawnsRef.current)
     setBerryPointCount((berryPoints ?? []).length)
     if (features.length) { const [w, s, e, n] = turfBbox(fc(features)); mapRef.current?.fitBounds([[w, s], [e, n]], { padding: 40, duration: 0 }) }
+    setMapReady(true)
   }
 
   const refreshWorld = async () => {
@@ -273,7 +275,7 @@ export default function PlayerView() {
   }, [])
 
   const fmtTime = (s: number | null) => s == null ? '—' : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
-  return <><div id="map" /><VersionBadge />
+  return <><div id="map" style={{ opacity: mapReady ? 1 : 0 }} /><VersionBadge />
     <div className="hud"><span><b>{gameName || 'KSMF Snake'}</b></span>{phase !== 'waiting' && <span className="pill">⏱ {fmtTime(remaining)}</span>}{phase === 'live' && <><span className="pill">🐍 {Math.round(length)} m</span><span className={`pill ${lead > 80 ? 'warn' : ''}`}>náskok {lead} m</span><span className="pill">🍓 {berries}</span><span className={`pill ${activeBerries === 0 && berryPointCount > 0 ? 'warn' : ''}`}>jahůdky na mapě {activeBerries}/{berryPointCount}</span><span className="pill">💥 {kills}</span></>}{sim && <span className="pill active">Simulace: klikni do mapy</span>}<Link className="pill link" to="/lobby">← lobby</Link>{error && <span className="pill warn">{error}</span>}</div>
     <div className="zoom-ctrl"><button onClick={() => mapRef.current?.zoomIn()}>+</button><button onClick={() => mapRef.current?.zoomOut()}>−</button></div>
     {snapWarning && phase === 'live' && <div className="wait-banner">⚠️ {snapWarning}</div>}
