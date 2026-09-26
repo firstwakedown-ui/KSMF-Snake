@@ -4,7 +4,9 @@
 begin;
 
 alter table public.snake_states add column if not exists target_length_m numeric;
+alter table public.snake_states add column if not exists tail_distance_m numeric;
 update public.snake_states set target_length_m=current_length_m where target_length_m is null;
+update public.snake_states set tail_distance_m=greatest(0,head_distance_m-current_length_m) where tail_distance_m is null;
 
 create or replace function public.snake_tick(p_game uuid, p_player uuid, p_lng double precision, p_lat double precision)
 returns jsonb
@@ -16,7 +18,7 @@ declare
   g games%rowtype; s snake_states%rowtype; raw geometry; snapped geometry; total numeric; advance numeric;
   body_start numeric; head_frac numeric; hit uuid; berry uuid; now_ts timestamptz:=clock_timestamp(); reason text;
   collision_m numeric; self_skip_m numeric; body_length_m numeric;
-  old_head_distance_m numeric; head_advance_m numeric; target_length numeric;
+  old_head_distance_m numeric; head_advance_m numeric; target_length numeric; tail_distance numeric;
 begin
   perform assert_player(p_player);
   select * into g from games where id=p_game for update;
@@ -41,7 +43,7 @@ begin
 
   if s.route is null then
     update snake_states set route=ST_MakeLine(snapped,snapped),body=null,player_pos=snapped,head_pos=snapped,
-      target_length_m=coalesce(target_length_m,current_length_m),last_tick_at=now_ts,updated_at=now_ts
+      target_length_m=coalesce(target_length_m,current_length_m),tail_distance_m=0,last_tick_at=now_ts,updated_at=now_ts
       where game_id=p_game and player_id=p_player;
     return jsonb_build_object('status','live','lead_m',0,'length_m',s.current_length_m);
   elsif s.player_pos is null or ST_Distance(s.player_pos::geography,snapped::geography)>=1 then
@@ -54,16 +56,20 @@ begin
   s.head_distance_m:=least(total,s.head_distance_m+advance);
   head_advance_m:=greatest(0,s.head_distance_m-old_head_distance_m);
   target_length:=greatest(s.current_length_m,coalesce(s.target_length_m,s.current_length_m));
+  tail_distance:=coalesce(s.tail_distance_m,greatest(0,old_head_distance_m-s.current_length_m));
 
   -- O stejnou vzdálenost, o jakou postoupí hlava, naroste během čekajícího
   -- růstu délka těla. body_start proto zůstává stejný a ocas stojí.
   if s.current_length_m < target_length then
     s.current_length_m:=least(target_length,s.current_length_m+head_advance_m);
     s.max_length_m:=greatest(s.max_length_m,s.current_length_m);
+    -- Ocas se během růstu vůbec neposune. Délka přibývá pouze vpředu.
+  else
+    tail_distance:=greatest(tail_distance,s.head_distance_m-target_length);
   end if;
 
   head_frac:=case when total>0 then s.head_distance_m/total else 0 end;
-  body_start:=case when total>0 then greatest(0,s.head_distance_m-s.current_length_m)/total else 0 end;
+  body_start:=case when total>0 then least(head_frac,greatest(0,tail_distance)/total) else 0 end;
   s.head_pos:=ST_LineInterpolatePoint(s.route,least(1,head_frac));
   s.body:=case when total>0 and head_frac>body_start then ST_LineSubstring(s.route,body_start,head_frac) else null end;
 
@@ -89,6 +95,7 @@ begin
   if reason is not null then
     update snake_states set active=false,route=null,body=null,head_pos=null,player_pos=snapped,head_distance_m=0,
       current_length_m=coalesce(g.snake_initial_length_m,10),target_length_m=coalesce(g.snake_initial_length_m,10),
+      tail_distance_m=0,
       respawn_point_id=null,respawn_started_at=null,last_tick_at=now_ts,updated_at=now_ts
       where game_id=p_game and player_id=p_player;
     if hit is not null and hit<>p_player then update snake_states set opponent_explosions=opponent_explosions+1 where game_id=p_game and player_id=hit; end if;
@@ -106,7 +113,7 @@ begin
   end if;
   update game_strawberries set active=true,next_spawn_at=null where game_id=p_game and not active and next_spawn_at<=now_ts;
   update snake_states set route=s.route,body=s.body,player_pos=snapped,head_pos=s.head_pos,head_distance_m=s.head_distance_m,
-    current_length_m=s.current_length_m,target_length_m=target_length,max_length_m=s.max_length_m,
+    current_length_m=s.current_length_m,target_length_m=target_length,tail_distance_m=tail_distance,max_length_m=s.max_length_m,
     strawberries_eaten=s.strawberries_eaten,last_tick_at=now_ts,updated_at=now_ts
     where game_id=p_game and player_id=p_player;
   return jsonb_build_object('status','live','lead_m',greatest(0,total-s.head_distance_m),
@@ -136,6 +143,7 @@ begin
   end if;
   update snake_states set active=true,route=ST_MakeLine(rp,rp),body=null,player_pos=rp,head_pos=rp,head_distance_m=0,
     current_length_m=coalesce(g.snake_initial_length_m,10),target_length_m=coalesce(g.snake_initial_length_m,10),
+    tail_distance_m=0,
     respawn_point_id=null,respawn_started_at=null,last_tick_at=now_ts,updated_at=now_ts
     where game_id=p_game and player_id=p_player;
   return jsonb_build_object('status','live');
