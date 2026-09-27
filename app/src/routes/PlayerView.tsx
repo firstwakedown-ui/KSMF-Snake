@@ -69,7 +69,9 @@ export default function PlayerView() {
       respawnMarkersRef.current = []
       return
     }
-    setSourceData(map, 'respawns', fc(respawnsRef.current.map((r) => pointFeature(r.geom.coordinates, { id: r.id, label: '', selected: selectedRespawnRef.current === r.id }))))
+    // Respawn je vykreslený klikacím HTML markerem níže. GeoJSON bod by pod
+    // ním vytvořil druhou modrou ikonu, proto zdroj ponecháváme prázdný.
+    setSourceData(map, 'respawns', emptyFC())
     respawnMarkersRef.current.forEach((marker) => marker.remove())
     respawnMarkersRef.current = respawnsRef.current.map((r) => {
       const selected = selectedRespawnRef.current === r.id
