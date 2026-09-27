@@ -878,6 +878,8 @@ function AdminBoard() {
   const saveSettings = async () => {
     const mt = matchRef.current
     if (!mt) return
+    setError(null)
+    setStatus('')
     const patch = {
       idle_timeout_s: idle, outside_timeout_s: outside, snap_tolerance_m: tol,
       walk_speed_mps: walkMps, run_speed_mps: runMps, sprint_speed_mps: sprintMps, sprint_range_m: sprintRange,
@@ -885,24 +887,16 @@ function AdminBoard() {
       snake_speed_mps: snakeKmh / 3.6, strawberry_spawn_min_s: berryMin, strawberry_spawn_max_s: berryMax,
       max_lead_m: maxLead, respawn_countdown_s: respawnSeconds,
       self_collision_grace_m: selfCollisionGrace,
+      strawberry_active_percent: berryActivePercent,
+      strawberry_initial_percent: berryInitialPercent,
     }
-    const { error: err } = await supabase!.from('matches').update(patch).eq('id', mt.id)
+    const { data: saved, error: err } = await supabase!.rpc('save_plan_settings', { p_match: mt.id, p_settings: patch })
     if (err) {
       setError(`Uložení nastavení: ${err.message}`)
       return
     }
-    const { error: berryErr } = await supabase!.rpc('save_strawberry_settings', {
-      p_match: mt.id,
-      p_active_percent: berryActivePercent,
-      p_initial_percent: berryInitialPercent,
-    })
-    if (berryErr) {
-      setError(`Uložení nastavení jahůdek: ${berryErr.message}`)
-      return
-    }
-    const { data: saved, error: verifyErr } = await supabase!.from('matches').select(MATCH_COLS).eq('id', mt.id).single()
-    if (verifyErr || !saved) {
-      setError(`Nastavení bylo uloženo, ale nepodařilo se ověřit jeho hodnoty: ${verifyErr?.message ?? 'plán nenalezen'}`)
+    if (!saved || saved.id !== mt.id || Object.entries(patch).some(([key, value]) => Math.abs(Number(saved[key]) - value) > 0.000001 || saved[key] == null)) {
+      setError('Server nepotvrdil požadované nastavení. Obnov plán a zkontroluj uložené hodnoty.')
       return
     }
     const verified = saved as Match
@@ -910,7 +904,7 @@ function AdminBoard() {
     setMatch(verified)
     setBerryActivePercent(verified.strawberry_active_percent)
     setBerryInitialPercent(verified.strawberry_initial_percent)
-    setStatus(`Nastavení skutečně uloženo: start ${verified.strawberry_initial_percent} %, maximum ${verified.strawberry_active_percent} %.`)
+    setStatus(`Plán „${verified.name}“ uložen: start ${verified.strawberry_initial_percent} %, maximum ${verified.strawberry_active_percent} %. Platí pro nové a čekající hry; běžící hry mají původní nastavení.`)
   }
 
   return (
@@ -1016,8 +1010,9 @@ function AdminBoard() {
 
             <section className="card">
               <h2>Nastavení zápasu</h2>
-              <p className="muted">Plán: {match?.name ?? '—'}</p>
-              <p className="muted">Tyto hodnoty se <b>uloží do každé nově založené hry</b> (snapshot) – stejná mapa tak může jet jednou pomalu, jednou rychle. Změna se nepromítne do už založených her.</p>
+              <label>Upravovaný plán <select value={match?.id ?? ''} onChange={(e) => selectPlan(e.target.value)}>{plans.map((p) => <option key={p.id} value={p.id}>{p.name ?? p.id}</option>)}</select></label>
+              <p className="muted">Změny potvrď tlačítkem Uložit nastavení. Platí pro nové a čekající hry tohoto plánu. Běžící hra si ponechá nastavení ze startu.</p>
+              <p className="muted">Uloženo v plánu: start {match?.strawberry_initial_percent ?? '—'} %, maximum {match?.strawberry_active_percent ?? '—'} %.</p>
               <div className="card-row"><label>Výchozí délka hada (m)</label><input type="number" min={1} value={snakeLength} onChange={(e) => setSnakeLength(+e.target.value)} /></div>
               <div className="card-row"><label>Prodloužení za jahůdku (m)</label><input type="number" min={1} value={berryGrowth} onChange={(e) => setBerryGrowth(+e.target.value)} /></div>
               <div className="card-row"><label>Délka hry (min)</label><input type="number" min={1} value={gameMinutes} onChange={(e) => setGameMinutes(+e.target.value)} /></div>
@@ -1044,7 +1039,8 @@ function AdminBoard() {
 
             <section className="card">
               <h2>Hry</h2>
-              <p className="muted">Založ hru z plánu připraveného ke hře a zadej počet hráčů (≤ počet startů).</p>
+              <p className="muted">Založ hru z plánu připraveného ke hře a zadej počet hráčů.</p>
+              {newGamePlan && newGamePlan !== match?.id && <p className="warn">Pozor: pro novou hru je vybraný jiný plán než v nastavení výše. Použije se nastavení vybraného herního plánu.</p>}
               <div className="gameform">
                 <input value={newGameName} onChange={(e) => setNewGameName(e.target.value)} placeholder="Název hry" maxLength={80} />
                 <select value={newGamePlan} onChange={(e) => setNewGamePlan(e.target.value)}>
