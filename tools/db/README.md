@@ -25,6 +25,18 @@ cd tools/db
 .\migrate.ps1 ..\..\supabase\import_graph.sql
 ```
 
+## Export mapových plánů pro jiný PostgreSQL
+
+```powershell
+cd tools/db
+.\export-plans.ps1
+```
+
+Vytvoří `supabase/data/plans.sql`. Export obsahuje pouze mapové plány, jejich
+cesty, startovní/respawn body a jahůdkové body. Neobsahuje hráče, hry, herní
+stav ani přístupové údaje. Podrobný návod k importu je v
+`supabase/data/README.md`.
+
 ## Bezpečnost
 - Connection string **neposílej do chatu** ani nedávej do Gitu.
 - Šifrovaný soubor je vázaný na tvůj účet + počítač (DPAPI) — jinde se nedešifruje.
