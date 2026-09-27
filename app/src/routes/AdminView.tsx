@@ -104,6 +104,7 @@ function AdminBoard() {
   const [match, setMatch] = useState<Match | null>(null)
   const [edgeCount, setEdgeCount] = useState<{ on: number; off: number }>({ on: 0, off: 0 })
   const [startCount, setStartCount] = useState(0)
+  const [berryPointCount, setBerryPointCount] = useState(0)
   const [draftLen, setDraftLen] = useState(0)
   const [hasArea, setHasArea] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -325,6 +326,7 @@ function AdminBoard() {
     const { data: bp, error: e5 } = await supabase!.from('strawberry_points').select('id,geom').eq('match_id', planId)
     if (e5) throw e5
     berriesRef.current = (bp ?? []).map((r: any, i) => ({ id: r.id, label: `J${i + 1}`, coord: r.geom.coordinates as [number, number] }))
+    setBerryPointCount(berriesRef.current.length)
     refreshBerries()
 
     fitToData()
@@ -525,12 +527,12 @@ function AdminBoard() {
     const mt = matchRef.current; if (!mt) return
     const { data, error: err } = await supabase!.rpc('add_strawberry_point', { p_match: mt.id, p_lng: lng, p_lat: lat })
     if (err) { setError(`Jahůdkový bod: ${err.message}`); return }
-    berriesRef.current.push({ id: data as string, label: `J${berriesRef.current.length + 1}`, coord: [lng, lat] }); refreshBerries(); setStatus('Jahůdkový bod přidán.')
+    berriesRef.current.push({ id: data as string, label: `J${berriesRef.current.length + 1}`, coord: [lng, lat] }); setBerryPointCount(berriesRef.current.length); refreshBerries(); setStatus('Jahůdkový bod přidán.')
   }
   const removeBerry = async (id: string) => {
     const { error: err } = await supabase!.rpc('remove_strawberry_point', { p_id: id })
     if (err) { setError(`Mazání jahůdkového bodu: ${err.message}`); return }
-    berriesRef.current = berriesRef.current.filter((b) => b.id !== id); refreshBerries(); setStatus('Jahůdkový bod smazán.')
+    berriesRef.current = berriesRef.current.filter((b) => b.id !== id); setBerryPointCount(berriesRef.current.length); refreshBerries(); setStatus('Jahůdkový bod smazán.')
   }
   const clearBerries = async () => {
     const mt = matchRef.current
@@ -539,6 +541,7 @@ function AdminBoard() {
     const { error: err } = await supabase!.from('strawberry_points').delete().eq('match_id', mt.id)
     if (err) { setError(`Mazání jahůdkových bodů: ${err.message}`); return }
     berriesRef.current = []
+    setBerryPointCount(0)
     refreshBerries()
     setStatus('Všechny jahůdkové body z plánu byly smazány.')
   }
@@ -915,7 +918,7 @@ function AdminBoard() {
             ))}
             <span className="pill">cesty: {edgeCount.on}✓ / {edgeCount.off}✕</span>
             <span className="pill">starty: {startCount}</span>
-            <span className="pill">jahůdkové body: {berriesRef.current.length}</span>
+            <span className="pill">jahůdkové body: {berryPointCount}</span>
             {error && <span className="pill warn">{error}</span>}
           </div>
 
@@ -957,7 +960,7 @@ function AdminBoard() {
                 <span className="admin-panel-hint">{startCount} respawnů · táhni = přesuň · dvojklik = smazat</span>
               </div>
             )}
-            {mode === 'berries' && <div className="admin-actions"><button onClick={clearBerries} disabled={berriesRef.current.length === 0}>Smazat jahůdky</button><span className="admin-panel-hint">{berriesRef.current.length} bodů · prázdné body hráči neuvidí · dvojklik = smazat</span></div>}
+            {mode === 'berries' && <div className="admin-actions"><button onClick={clearBerries} disabled={berryPointCount === 0}>Smazat jahůdky</button><span className="admin-panel-hint">{berryPointCount} bodů · prázdné body hráči neuvidí · dvojklik = smazat</span></div>}
           </div>
         </>
       )}
@@ -999,7 +1002,7 @@ function AdminBoard() {
               <div className="card-row"><label>Jahůdka nejdříve (s)</label><input type="number" min={1} value={berryMin} onChange={(e) => setBerryMin(+e.target.value)} /></div>
               <div className="card-row"><label>Jahůdka nejpozději (s)</label><input type="number" min={berryMin} value={berryMax} onChange={(e) => setBerryMax(+e.target.value)} /></div>
               <div className="card-row"><label>Maximum aktivních jahůdek (%)</label><input type="number" min={1} max={100} value={berryActivePercent} onChange={(e) => setBerryActivePercent(Math.max(1, Math.min(100, +e.target.value)))} /></div>
-              <p className="muted">Při {berriesRef.current.length} bodech může být současně aktivních nejvýše {Math.ceil(berriesRef.current.length * berryActivePercent / 100)}.</p>
+              <p className="muted">Při {berryPointCount} bodech může být současně aktivních nejvýše {Math.ceil(berryPointCount * berryActivePercent / 100)}.</p>
               <div className="card-row"><label>Maximální náskok (m)</label><input type="number" min={5} value={maxLead} onChange={(e) => setMaxLead(+e.target.value)} /></div>
               <div className="card-row"><label>Respawn odpočet (s)</label><input type="number" min={0} value={respawnSeconds} onChange={(e) => setRespawnSeconds(+e.target.value)} /></div>
               <div className="card-row"><label>Nečinnost (s) <span className="tip" title="Po kolika sekundách bez pohybu hráč vypadne (stojí na místě). Default 30 s.">ⓘ</span></label><input type="number" min={5} value={idle} onChange={(e) => setIdle(+e.target.value)} /></div>
