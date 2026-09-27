@@ -29,6 +29,18 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
   const [mapReady, setMapReady] = useState(false)
   const [, force] = useState(0)
 
+  const upsertRosterPlayer = (playerId: string, nickname: string) => {
+    setRoster((current) => {
+      const existing = current.find((row) => row.player_id === playerId)
+      if (existing && (!nickname || existing.nickname === nickname)) return current
+      const next = existing
+        ? current.map((row) => row.player_id === playerId ? { ...row, nickname: nickname || row.nickname } : row)
+        : [...current, { player_id: playerId, nickname: nickname || '?' }]
+      colorRef.current = assignColors(next.map((row) => row.player_id))
+      return next
+    })
+  }
+
   useEffect(() => {
     const map = new maplibregl.Map({ container: 'spectate-map', style: MAP_STYLE, center: BARRANDOV, zoom: 15 })
     mapRef.current = map
@@ -112,6 +124,7 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
       if (statusRef.current === 'running') return
       let p = playersRef.current.get(payload.id)
       if (!p) { p = { nick: payload.nick ?? '?', trail: [], pos: null, lastSeen: 0 }; playersRef.current.set(payload.id, p) }
+      upsertRosterPlayer(payload.id, payload.nick ?? p.nick)
       p.pos = payload.pos; p.lastSeen = Date.now()
       renderPlayers()
     })
@@ -140,6 +153,7 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
     if (!supabase || !mapRef.current) return
     const { data } = await supabase.rpc('snake_world', { p_game: gameId })
     for (const row of (data ?? []) as SnakeWorldRow[]) {
+      upsertRosterPlayer(row.player_id, row.nickname)
       let player = playersRef.current.get(row.player_id)
       if (!player) {
         player = { nick: row.nickname, trail: [], pos: null, lastSeen: 0 }
