@@ -17,10 +17,10 @@ begin
   perform assert_admin();
 
   if p_active_percent < 1 or p_active_percent > 100 then
-    raise exception 'Maximum aktivních jahůdek musí být 1 až 100 %.';
+    raise exception 'Maximum aktivních jahůdek musí být 1 až 100 %%.';
   end if;
   if p_initial_percent < 0 or p_initial_percent > 100 then
-    raise exception 'Počet jahůdek při startu musí být 0 až 100 %.';
+    raise exception 'Počet jahůdek při startu musí být 0 až 100 %%.';
   end if;
 
   update matches
