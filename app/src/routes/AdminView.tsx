@@ -893,9 +893,17 @@ function AdminBoard() {
       setError(`Uložení nastavení: ${err.message}`)
       return
     }
+    const { error: lobbyErr } = await supabase!.from('games').update({
+      strawberry_active_percent: berryActivePercent,
+      strawberry_initial_percent: berryInitialPercent,
+    }).eq('plan_id', mt.id).eq('status', 'lobby')
+    if (lobbyErr) {
+      setError(`Nastavení plánu bylo uloženo, ale čekající hry se nepodařilo aktualizovat: ${lobbyErr.message}`)
+      return
+    }
     matchRef.current = { ...mt, ...patch }
     setMatch(matchRef.current)
-    setStatus('Nastavení uloženo.')
+    setStatus('Nastavení uloženo i do čekajících her.')
   }
 
   return (
