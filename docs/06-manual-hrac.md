@@ -1,6 +1,6 @@
-# KSMF Snake - příručka pro hráče
+# KŠMF Snake - příručka pro hráče
 
-KSMF Snake je venkovní hra v reálném městě. Chůzí vytváříš budoucí trasu svého hada, který se po ní pohybuje stálou rychlostí. Sbírej jahůdky, prodlužuj hada a snaž se, aby soupeři narazili do jeho těla.
+KŠMF Snake je venkovní hra v reálném městě. Chůzí vytváříš budoucí trasu svého hada, který se po ní pohybuje stálou rychlostí. Sbírej jahůdky, prodlužuj hada a snaž se, aby soupeři narazili do jeho těla.
 
 > Bezpečnost má vždy přednost. Sleduj dopravu, chodce a své okolí. Nevstupuj do vozovky kvůli hře a při chůzi nekoukej nepřetržitě do telefonu. Hraješ na vlastní odpovědnost.
 

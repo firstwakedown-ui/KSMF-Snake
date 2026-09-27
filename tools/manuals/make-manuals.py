@@ -20,7 +20,7 @@ from reportlab.platypus import (
 
 ROOT = Path(__file__).resolve().parents[2]
 PUBLIC = ROOT / "app" / "public"
-ICON = PUBLIC / "pwa-512x512.png"
+LOGO = ROOT / "assets" / "branding" / "ksmf-snake-logo-v2.png"
 FONTS = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts"
 
 NAVY = colors.HexColor("#0d1117")
@@ -98,19 +98,19 @@ def markdown_flow(path: Path, styles):
 def build(source: Path, target: Path, subtitle: str):
     title = source.read_text(encoding="utf-8").splitlines()[0].removeprefix("# ").strip()
     styles = stylesheet()
-    doc = BaseDocTemplate(str(target), pagesize=A4, topMargin=17 * mm, bottomMargin=17 * mm, leftMargin=18 * mm, rightMargin=18 * mm, title=title, author="KSMF Snake")
+    doc = BaseDocTemplate(str(target), pagesize=A4, topMargin=17 * mm, bottomMargin=17 * mm, leftMargin=18 * mm, rightMargin=18 * mm, title=title, author="KŠMF Snake")
     frame = Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id="main")
 
     def footer(canvas, current_doc):
         canvas.saveState()
         canvas.setFont("Arial", 8)
         canvas.setFillColor(GREY)
-        canvas.drawString(doc.leftMargin, 10 * mm, "KSMF Snake - lokační hra v reálném městě")
+        canvas.drawString(doc.leftMargin, 10 * mm, "KŠMF Snake - lokační hra v reálném městě")
         canvas.drawRightString(doc.leftMargin + doc.width, 10 * mm, f"strana {current_doc.page}")
         canvas.restoreState()
 
     doc.addPageTemplates([PageTemplate(id="manual", frames=[frame], onPage=footer)])
-    heading = Table([[Image(str(ICON), width=18 * mm, height=18 * mm), Paragraph(f"<b>{html.escape(title)}</b><br/><font size='10' color='#57606a'>{html.escape(subtitle)}</font>", styles["Title"])]], colWidths=[22 * mm, None])
+    heading = Table([[Image(str(LOGO), width=30 * mm, height=30 * mm), Paragraph(f"<b>{html.escape(title)}</b><br/><font size='10' color='#57606a'>{html.escape(subtitle)}</font>", styles["Title"])]], colWidths=[34 * mm, None])
     heading.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LEFTPADDING", (0, 0), (-1, -1), 0)]))
     flow = [heading, Spacer(1, 5), HRFlowable(width="100%", thickness=1.2, color=BLUE), Spacer(1, 7)]
     flow.extend(markdown_flow(source, styles))

@@ -1,4 +1,4 @@
-# KSMF Snake - příručka pro admina
+# KŠMF Snake - příručka pro admina
 
 Admin připravuje mapové plány, respawn a jahůdkové body, nastavuje pravidla, vytváří hry, sleduje jejich průběh a vyhodnocuje výsledky.
 
@@ -61,7 +61,7 @@ V části **Správa - Nastavení zápasu** uprav společné hodnoty pro nové hr
 - **Respawn odpočet:** čekání u dosaženého bodu; výchozí 3 s.
 - **Tolerance snap:** jak daleko od osy cesty se GPS ještě přichytí na povolenou síť; výchozí 30 m.
 
-Rozhraní stále zobrazuje také starší parametry nečinnosti, opuštění ulice a virtuálního Run režimu. Pro základní venkovní KSMF Snake používej především výše uvedené hodnoty.
+Rozhraní stále zobrazuje také starší parametry nečinnosti, opuštění ulice a virtuálního Run režimu. Pro základní venkovní KŠMF Snake používej především výše uvedené hodnoty.
 
 Nastavení není součástí plánu. Při založení hry se aktuální společná konfigurace zkopíruje do hry jako snapshot. Pozdější změna konfigurace nezmění žádnou již založenou hru, včetně hry čekající v lobby.
 
