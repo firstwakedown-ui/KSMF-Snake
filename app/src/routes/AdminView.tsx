@@ -883,8 +883,6 @@ function AdminBoard() {
       walk_speed_mps: walkMps, run_speed_mps: runMps, sprint_speed_mps: sprintMps, sprint_range_m: sprintRange,
       snake_initial_length_m: snakeLength, strawberry_growth_m: berryGrowth, game_duration_s: gameMinutes * 60,
       snake_speed_mps: snakeKmh / 3.6, strawberry_spawn_min_s: berryMin, strawberry_spawn_max_s: berryMax,
-      strawberry_active_percent: berryActivePercent,
-      strawberry_initial_percent: berryInitialPercent,
       max_lead_m: maxLead, respawn_countdown_s: respawnSeconds,
       self_collision_grace_m: selfCollisionGrace,
     }
@@ -893,17 +891,26 @@ function AdminBoard() {
       setError(`Uložení nastavení: ${err.message}`)
       return
     }
-    const { error: lobbyErr } = await supabase!.from('games').update({
-      strawberry_active_percent: berryActivePercent,
-      strawberry_initial_percent: berryInitialPercent,
-    }).eq('plan_id', mt.id).eq('status', 'lobby')
-    if (lobbyErr) {
-      setError(`Nastavení plánu bylo uloženo, ale čekající hry se nepodařilo aktualizovat: ${lobbyErr.message}`)
+    const { error: berryErr } = await supabase!.rpc('save_strawberry_settings', {
+      p_match: mt.id,
+      p_active_percent: berryActivePercent,
+      p_initial_percent: berryInitialPercent,
+    })
+    if (berryErr) {
+      setError(`Uložení nastavení jahůdek: ${berryErr.message}`)
       return
     }
-    matchRef.current = { ...mt, ...patch }
-    setMatch(matchRef.current)
-    setStatus('Nastavení uloženo i do čekajících her.')
+    const { data: saved, error: verifyErr } = await supabase!.from('matches').select(MATCH_COLS).eq('id', mt.id).single()
+    if (verifyErr || !saved) {
+      setError(`Nastavení bylo uloženo, ale nepodařilo se ověřit jeho hodnoty: ${verifyErr?.message ?? 'plán nenalezen'}`)
+      return
+    }
+    const verified = saved as Match
+    matchRef.current = verified
+    setMatch(verified)
+    setBerryActivePercent(verified.strawberry_active_percent)
+    setBerryInitialPercent(verified.strawberry_initial_percent)
+    setStatus(`Nastavení skutečně uloženo: start ${verified.strawberry_initial_percent} %, maximum ${verified.strawberry_active_percent} %.`)
   }
 
   return (
