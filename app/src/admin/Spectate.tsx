@@ -27,6 +27,7 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
   const [status, setStatus] = useState(status0)
   const [remaining, setRemaining] = useState<number | null>(null)
   const [mapReady, setMapReady] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
   const [, force] = useState(0)
 
   const upsertRosterPlayer = (playerId: string, nickname: string) => {
@@ -198,8 +199,9 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
   }
 
   const start = async () => {
+    setActionError(null)
     const { error } = await supabase!.rpc('run_game', { p_game: gameId })
-    if (error) return
+    if (error) { setActionError(`Spuštění hry: ${error.message}`); return }
     statusRef.current = 'running'
     setStatus('running')
     onChanged?.()
@@ -208,7 +210,7 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
   const finish = async () => {
     if (!window.confirm('Opravdu ukončit tuto hru? Hráči uvidí výsledky a hra přejde do historie.')) return
     const { error } = await supabase!.rpc('finish_game', { p_game: gameId })
-    if (error) return
+    if (error) { setActionError(`Ukončení hry: ${error.message}`); return }
     statusRef.current = 'finished'
     setStatus('finished')
     onChanged?.()
@@ -224,6 +226,7 @@ export default function Spectate({ gameId, planId, status: status0, onClose, onC
         {status === 'lobby' && !readOnly && <button onClick={start}>Spustit hru</button>}
         {status === 'running' && !readOnly && <button className="danger" onClick={finish}>Ukončit hru</button>}
         <button className="ghost" onClick={onClose}>Zavřít</button>
+        {actionError && <span className="pill warn">{actionError}</span>}
       </div>
       <div id="spectate-map" className="spectate-map" style={{ opacity: mapReady ? 1 : 0 }} />
       <div className="zoom-ctrl">
