@@ -306,7 +306,7 @@ function AdminBoard() {
     setSnakeLength(Number(mt.snake_initial_length_m))
     setBerryGrowth(Number(mt.strawberry_growth_m))
     setGameMinutes(Math.round(mt.game_duration_s / 60))
-    setSnakeKmh(Number(mt.snake_speed_mps) * 3.6)
+    setSnakeKmh(Math.round(Number(mt.snake_speed_mps) * 36) / 10)
     setBerryMin(mt.strawberry_spawn_min_s)
     setBerryMax(mt.strawberry_spawn_max_s)
     setBerryActivePercent(mt.strawberry_active_percent ?? 100)
@@ -1012,7 +1012,7 @@ function AdminBoard() {
               <div className="card-row"><label>Maximum aktivních jahůdek (%)</label><input type="number" min={1} max={100} value={berryActivePercent} onChange={(e) => setBerryActivePercent(Math.max(1, Math.min(100, +e.target.value)))} /></div>
               <div className="card-row"><label>Jahůdky aktivní při startu (%)</label><input type="number" min={0} max={100} value={berryInitialPercent} onChange={(e) => setBerryInitialPercent(Math.max(0, Math.min(100, +e.target.value)))} /></div>
               <p className="muted">Při {berryPointCount} bodech může být současně aktivních nejvýše {Math.ceil(berryPointCount * berryActivePercent / 100)}.</p>
-              <p className="muted">Na začátku hry se aktivuje {Math.min(Math.ceil(berryPointCount * berryInitialPercent / 100), Math.ceil(berryPointCount * berryActivePercent / 100))} jahůdek.</p>
+              <p className="muted">Na začátku hry se aktivuje {Math.ceil(berryPointCount * berryInitialPercent / 100)} jahůdek. Průběžný maximální limit platí až pro jejich další obnovování.</p>
               <div className="card-row"><label>Maximální náskok (m)</label><input type="number" min={5} value={maxLead} onChange={(e) => setMaxLead(+e.target.value)} /></div>
               <div className="card-row"><label>Respawn odpočet (s)</label><input type="number" min={0} value={respawnSeconds} onChange={(e) => setRespawnSeconds(+e.target.value)} /></div>
               <div className="card-row"><label>Bezpečná délka za hlavou (m)</label><input type="number" min={0} step={1} value={selfCollisionGrace} onChange={(e) => setSelfCollisionGrace(Math.max(0, +e.target.value))} /></div>
