@@ -532,6 +532,16 @@ function AdminBoard() {
     if (err) { setError(`Mazání jahůdkového bodu: ${err.message}`); return }
     berriesRef.current = berriesRef.current.filter((b) => b.id !== id); refreshBerries(); setStatus('Jahůdkový bod smazán.')
   }
+  const clearBerries = async () => {
+    const mt = matchRef.current
+    if (!mt || !berriesRef.current.length) return
+    if (!window.confirm(`Smazat všech ${berriesRef.current.length} jahůdkových bodů z plánu „${mt.name ?? ''}"?`)) return
+    const { error: err } = await supabase!.from('strawberry_points').delete().eq('match_id', mt.id)
+    if (err) { setError(`Mazání jahůdkových bodů: ${err.message}`); return }
+    berriesRef.current = []
+    refreshBerries()
+    setStatus('Všechny jahůdkové body z plánu byly smazány.')
+  }
 
   // --- Chodníky: HROMADNÉ zapnutí/vypnutí všech chodníků (jen pohodlí; jednotlivě jdou klikat v Ulicích) ---
   const toggleFootpaths = async (val: boolean) => {
@@ -947,7 +957,7 @@ function AdminBoard() {
                 <span className="admin-panel-hint">{startCount} respawnů · táhni = přesuň · dvojklik = smazat</span>
               </div>
             )}
-            {mode === 'berries' && <div className="admin-actions"><span className="admin-panel-hint">{berriesRef.current.length} bodů · prázdné body hráči neuvidí · dvojklik = smazat</span></div>}
+            {mode === 'berries' && <div className="admin-actions"><button onClick={clearBerries} disabled={berriesRef.current.length === 0}>Smazat jahůdky</button><span className="admin-panel-hint">{berriesRef.current.length} bodů · prázdné body hráči neuvidí · dvojklik = smazat</span></div>}
           </div>
         </>
       )}
