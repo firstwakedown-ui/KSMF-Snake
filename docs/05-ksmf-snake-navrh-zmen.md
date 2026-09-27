@@ -211,7 +211,7 @@ Mapa, kterou lze použít opakovaně pro více her, obsahuje:
 
 ### 8.2 Konfigurace hry
 
-Admin před založením hry nastaví nebo převezme z plánu:
+Admin před založením hry uloží společnou konfiguraci nové hry:
 
 | Parametr | Význam | Jednotka / tvar | Výchozí hodnota |
 |---|---|---|---:|
@@ -226,7 +226,7 @@ Admin před založením hry nastaví nebo převezme z plánu:
 | Kolizní tolerance | Rezerva pro GPS nepřesnost | metry | k terénnímu doladění |
 | Poloměr sběru jahůdky | Vzdálenost hlavy nutná pro sebrání | metry | k terénnímu doladění |
 
-Konfigurace se při vytvoření konkrétní hry uloží jako **snapshot**, aby změna plánu neovlivnila již rozehraný nebo historický zápas.
+Plán obsahuje mapová data. Při založení konkrétní hry se plán spojí s aktuální společnou konfigurací a všechny parametry se uloží do hry jako **snapshot**. Pozdější změna konfigurace neovlivní žádnou již založenou, rozehranou ani historickou hru.
 
 ---
 

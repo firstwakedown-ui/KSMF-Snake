@@ -52,6 +52,14 @@ type ReadyPlan = { id: string; name: string | null; starts: number }
 type Edge = { id: number; name: string | null; enabled: boolean; is_foot: boolean; geom: any }
 type Start = { id: string; label: string; coord: [number, number] }
 type MapPoint = { id: string; label: string; coord: [number, number] }
+type GameSettings = {
+  idle_timeout_s: number; outside_timeout_s: number; snap_tolerance_m: number
+  walk_speed_mps: number; run_speed_mps: number; sprint_speed_mps: number; sprint_range_m: number
+  snake_initial_length_m: number; strawberry_growth_m: number; game_duration_s: number; snake_speed_mps: number
+  strawberry_spawn_min_s: number; strawberry_spawn_max_s: number
+  strawberry_active_percent: number; strawberry_initial_percent: number
+  max_lead_m: number; respawn_countdown_s: number; self_collision_grace_m: number
+}
 
 const MATCH_COLS = 'id,name,area,is_active,ready,footpaths_enabled,idle_timeout_s,outside_timeout_s,snap_tolerance_m,walk_speed_mps,run_speed_mps,sprint_speed_mps,sprint_range_m,snake_initial_length_m,strawberry_growth_m,game_duration_s,snake_speed_mps,strawberry_spawn_min_s,strawberry_spawn_max_s,strawberry_active_percent,strawberry_initial_percent,max_lead_m,respawn_countdown_s,self_collision_grace_m'
 
@@ -212,6 +220,7 @@ function AdminBoard() {
       loadCodes()
       loadAccounts()
       loadGames()
+      await loadGameSettings()
       let list = await loadPlans()
       if (!list.length) {
         const { data: ins, error: e } = await supabase!.from('matches').insert({ name: 'Plán 1', is_active: true }).select(MATCH_COLS).single()
@@ -225,6 +234,23 @@ function AdminBoard() {
     } catch (e: any) {
       setError(`Načtení: ${e.message ?? e}`)
     }
+  }
+
+  const applyGameSettings = (settings: GameSettings) => {
+    setIdle(settings.idle_timeout_s); setOutside(settings.outside_timeout_s); setTol(settings.snap_tolerance_m)
+    setWalkMps(Number(settings.walk_speed_mps)); setRunMps(Number(settings.run_speed_mps)); setSprintMps(Number(settings.sprint_speed_mps))
+    setSprintRange(settings.sprint_range_m); setSnakeLength(Number(settings.snake_initial_length_m)); setBerryGrowth(Number(settings.strawberry_growth_m))
+    setGameMinutes(Math.round(settings.game_duration_s / 60)); setSnakeKmh(Math.round(Number(settings.snake_speed_mps) * 36) / 10)
+    setBerryMin(settings.strawberry_spawn_min_s); setBerryMax(settings.strawberry_spawn_max_s)
+    setBerryActivePercent(settings.strawberry_active_percent); setBerryInitialPercent(settings.strawberry_initial_percent)
+    setMaxLead(Number(settings.max_lead_m)); setRespawnSeconds(settings.respawn_countdown_s)
+    setSelfCollisionGrace(Number(settings.self_collision_grace_m))
+  }
+
+  const loadGameSettings = async () => {
+    const { data, error: e } = await supabase!.rpc('get_game_settings')
+    if (e) throw e
+    applyGameSettings(data as GameSettings)
   }
 
   const loadPlans = async (): Promise<Plan[]> => {
@@ -296,24 +322,6 @@ function AdminBoard() {
     const mt = m as Match
     matchRef.current = mt
     setMatch(mt)
-    setIdle(mt.idle_timeout_s)
-    setOutside(mt.outside_timeout_s)
-    setTol(mt.snap_tolerance_m)
-    setWalkMps(Number(mt.walk_speed_mps))
-    setRunMps(Number(mt.run_speed_mps))
-    setSprintMps(Number(mt.sprint_speed_mps))
-    setSprintRange(mt.sprint_range_m)
-    setSnakeLength(Number(mt.snake_initial_length_m))
-    setBerryGrowth(Number(mt.strawberry_growth_m))
-    setGameMinutes(Math.round(mt.game_duration_s / 60))
-    setSnakeKmh(Math.round(Number(mt.snake_speed_mps) * 36) / 10)
-    setBerryMin(mt.strawberry_spawn_min_s)
-    setBerryMax(mt.strawberry_spawn_max_s)
-    setBerryActivePercent(mt.strawberry_active_percent ?? 100)
-    setBerryInitialPercent(mt.strawberry_initial_percent ?? 33)
-    setMaxLead(Number(mt.max_lead_m))
-    setRespawnSeconds(mt.respawn_countdown_s)
-    setSelfCollisionGrace(Number(mt.self_collision_grace_m ?? 10))
     setFootEnabled(mt.footpaths_enabled)
     applyArea(mt.area)
     areaDraftRef.current = []
@@ -876,8 +884,6 @@ function AdminBoard() {
 
   // --- Nastavení (časovače + tolerance) ---
   const saveSettings = async () => {
-    const mt = matchRef.current
-    if (!mt) return
     setError(null)
     setStatus('')
     const patch = {
@@ -890,21 +896,17 @@ function AdminBoard() {
       strawberry_active_percent: berryActivePercent,
       strawberry_initial_percent: berryInitialPercent,
     }
-    const { data: saved, error: err } = await supabase!.rpc('save_plan_settings', { p_match: mt.id, p_settings: patch })
+    const { data: saved, error: err } = await supabase!.rpc('save_game_settings', { p_settings: patch })
     if (err) {
       setError(`Uložení nastavení: ${err.message}`)
       return
     }
-    if (!saved || saved.id !== mt.id || Object.entries(patch).some(([key, value]) => Math.abs(Number(saved[key]) - value) > 0.000001 || saved[key] == null)) {
-      setError('Server nepotvrdil požadované nastavení. Obnov plán a zkontroluj uložené hodnoty.')
+    if (!saved || Object.entries(patch).some(([key, value]) => Math.abs(Number(saved[key]) - value) > 0.000001 || saved[key] == null)) {
+      setError('Server nepotvrdil požadované nastavení. Obnov stránku a zkontroluj uložené hodnoty.')
       return
     }
-    const verified = saved as Match
-    matchRef.current = verified
-    setMatch(verified)
-    setBerryActivePercent(verified.strawberry_active_percent)
-    setBerryInitialPercent(verified.strawberry_initial_percent)
-    setStatus(`Plán „${verified.name}“ uložen: start ${verified.strawberry_initial_percent} %, maximum ${verified.strawberry_active_percent} %. Platí pro nové a čekající hry; běžící hry mají původní nastavení.`)
+    applyGameSettings(saved as GameSettings)
+    setStatus('Nastavení bylo uloženo.')
   }
 
   return (
@@ -1010,9 +1012,7 @@ function AdminBoard() {
 
             <section className="card">
               <h2>Nastavení zápasu</h2>
-              <label>Upravovaný plán <select value={match?.id ?? ''} onChange={(e) => selectPlan(e.target.value)}>{plans.map((p) => <option key={p.id} value={p.id}>{p.name ?? p.id}</option>)}</select></label>
-              <p className="muted">Změny potvrď tlačítkem Uložit nastavení. Platí pro nové a čekající hry tohoto plánu. Běžící hra si ponechá nastavení ze startu.</p>
-              <p className="muted">Uloženo v plánu: start {match?.strawberry_initial_percent ?? '—'} %, maximum {match?.strawberry_active_percent ?? '—'} %.</p>
+              <p className="muted">Společná konfigurace pro každou nově založenou hru. Při založení se všechny hodnoty zkopírují do hry; pozdější změny už žádnou existující hru neovlivní.</p>
               <div className="card-row"><label>Výchozí délka hada (m)</label><input type="number" min={1} value={snakeLength} onChange={(e) => setSnakeLength(+e.target.value)} /></div>
               <div className="card-row"><label>Prodloužení za jahůdku (m)</label><input type="number" min={1} value={berryGrowth} onChange={(e) => setBerryGrowth(+e.target.value)} /></div>
               <div className="card-row"><label>Délka hry (min)</label><input type="number" min={1} value={gameMinutes} onChange={(e) => setGameMinutes(+e.target.value)} /></div>
@@ -1021,8 +1021,7 @@ function AdminBoard() {
               <div className="card-row"><label>Jahůdka nejpozději (s)</label><input type="number" min={berryMin} value={berryMax} onChange={(e) => setBerryMax(+e.target.value)} /></div>
               <div className="card-row"><label>Maximum aktivních jahůdek (%)</label><input type="number" min={1} max={100} value={berryActivePercent} onChange={(e) => setBerryActivePercent(Math.max(1, Math.min(100, +e.target.value)))} /></div>
               <div className="card-row"><label>Jahůdky aktivní při startu (%)</label><input type="number" min={0} max={100} value={berryInitialPercent} onChange={(e) => setBerryInitialPercent(Math.max(0, Math.min(100, +e.target.value)))} /></div>
-              <p className="muted">Při {berryPointCount} bodech může být současně aktivních nejvýše {Math.ceil(berryPointCount * berryActivePercent / 100)}.</p>
-              <p className="muted">Na začátku hry se aktivuje {Math.ceil(berryPointCount * berryInitialPercent / 100)} jahůdek. Průběžný maximální limit platí až pro jejich další obnovování.</p>
+              <p className="muted">Počet jahůdek se při založení hry vypočítá z počtu bodů vybraného plánu a zaokrouhlí nahoru. Maximální limit platí pro jejich další obnovování.</p>
               <div className="card-row"><label>Maximální náskok (m)</label><input type="number" min={5} value={maxLead} onChange={(e) => setMaxLead(+e.target.value)} /></div>
               <div className="card-row"><label>Respawn odpočet (s)</label><input type="number" min={0} value={respawnSeconds} onChange={(e) => setRespawnSeconds(+e.target.value)} /></div>
               <div className="card-row"><label>Bezpečná délka za hlavou (m)</label><input type="number" min={0} step={1} value={selfCollisionGrace} onChange={(e) => setSelfCollisionGrace(Math.max(0, +e.target.value))} /></div>
@@ -1040,7 +1039,6 @@ function AdminBoard() {
             <section className="card">
               <h2>Hry</h2>
               <p className="muted">Založ hru z plánu připraveného ke hře a zadej počet hráčů.</p>
-              {newGamePlan && newGamePlan !== match?.id && <p className="warn">Pozor: pro novou hru je vybraný jiný plán než v nastavení výše. Použije se nastavení vybraného herního plánu.</p>}
               <div className="gameform">
                 <input value={newGameName} onChange={(e) => setNewGameName(e.target.value)} placeholder="Název hry" maxLength={80} />
                 <select value={newGamePlan} onChange={(e) => setNewGamePlan(e.target.value)}>

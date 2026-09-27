@@ -50,7 +50,7 @@ Plán musí mít povolené cesty a alespoň jeden respawn bod. Po dokončení kl
 
 ## 3. Nastavení zápasu
 
-V části **Správa - Nastavení zápasu** uprav hodnoty vybraného plánu a klikni **Uložit nastavení**.
+V části **Správa - Nastavení zápasu** uprav společné hodnoty pro nové hry a klikni **Uložit nastavení**. Po úspěchu aplikace zobrazí **Nastavení bylo uloženo.**
 
 - **Výchozí délka hada:** délka při startu a po respawnu; výchozí 10 m.
 - **Prodloužení za jahůdku:** přírůstek po sebrání hlavou; výchozí 10 m.
@@ -63,7 +63,7 @@ V části **Správa - Nastavení zápasu** uprav hodnoty vybraného plánu a kli
 
 Rozhraní stále zobrazuje také starší parametry nečinnosti, opuštění ulice a virtuálního Run režimu. Pro základní venkovní KSMF Snake používej především výše uvedené hodnoty.
 
-Nastavení funguje jako snapshot: nová hra dostane aktuální hodnoty plánu. Pozdější změna plánu už existující hru nezmění.
+Nastavení není součástí plánu. Při založení hry se aktuální společná konfigurace zkopíruje do hry jako snapshot. Pozdější změna konfigurace nezmění žádnou již založenou hru, včetně hry čekající v lobby.
 
 ## 4. Přístupové kódy a hráči
 
@@ -73,12 +73,13 @@ Hráč si při registraci vytváří vlastní heslo. V kartě hráčů může ad
 
 ## 5. Vytvoření a spuštění hry
 
-1. V kartě **Hry** vyber připravený plán.
-2. Nastav kapacitu hráčů a pro venkovní test zvol **Realtime (GPS)**.
-3. Klikni **+ Nová hra**.
-4. Počkej, až se hráči připojí v lobby.
-5. Tlačítkem **Sleduj** otevři živou mapu a zkontroluj účastníky.
-6. Klikni **Spustit**. Hráčům začne desetisekundový odpočet a poté běží herní čas.
+1. Ulož požadované **Nastavení zápasu**.
+2. V kartě **Hry** vyber připravený plán.
+3. Nastav kapacitu hráčů a pro venkovní test zvol **Realtime (GPS)**.
+4. Klikni **+ Nová hra**. V tomto okamžiku se plán spojí s aktuální konfigurací a vznikne neměnný snapshot hry.
+5. Počkej, až se hráči připojí v lobby.
+6. Tlačítkem **Sleduj** otevři živou mapu a zkontroluj účastníky.
+7. Klikni **Spustit**. Hráčům začne desetisekundový odpočet a poté běží herní čas.
 
 Hráči nepotřebují předem přidělené starty. Mohou se před spuštěním rozmístit kdekoliv na herní síti.
 

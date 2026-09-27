@@ -7,16 +7,17 @@ that RLS or the activation trigger were confirmed causes were unsubstantiated.
 The manual repair then set a plan AND its running game to 100/100 and activated
 all berries. Changing a plan cannot undo that running-game state.
 
-Migration 49 saves all parameters in one admin-checked transaction, returns the
-persisted plan, and updates lobby games of that plan. The client compares every
-returned value with its request before reporting success. New games copy all
-settings, including joystick values omitted by create_game in migration 42.
-Running games retain their snapshot. Migration 47 initializes berries using the
-plan percentages. Start percent remains independent of the later respawn cap.
+Migration 50 replaces plan settings with one global game_settings row. Saving
+configuration changes only that row. A BEFORE INSERT trigger copies every value
+to a newly created game, forming the immutable snapshot boundary. Lobby and
+running games are never updated by later saves. run_game reads only the game
+snapshot and no longer refreshes strawberry percentages from the plan. The client
+compares every persisted value with its request before reporting success.
 
 Expected cases on 29 points: 50/50 starts with 15 active; 100/100 with 29;
 0/50 starts empty and refills to at most 15. On 39 points, 50/50 starts with 20.
-Save first and compare fresh games on the same plan.
+Save first and test a newly created game. Existing games intentionally retain
+the values they had at creation.
 
 Snake tick reads speed, initial length, growth, spawn interval, lead limit,
 self-collision grace and duration from games. Respawn uses game settings.
