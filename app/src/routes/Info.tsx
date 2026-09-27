@@ -19,7 +19,7 @@ export default function Info() {
       <div className="info-body">
         <img src="/logo.gif" alt="KSMF Snake" className="info-logo" />
         <h1>KSMF Snake</h1>
-        <p className="credits">Vyrobil <b>Claude Code</b> &amp; <b>WakeDown</b> · <a href="mailto:wakedown@matfyz.cz">wakedown@matfyz.cz</a></p>
+        <p className="credits">Vyrobil <b>ChatGPT</b> &amp; <b>WakeDown</b> · <a href="mailto:wakedown@matfyz.cz">wakedown@matfyz.cz</a></p>
         <p className="muted">Lokační hra v reálném městě — had na ulicích. Aktuální pravidla, výchozí nastavení a technický stav jsou uvedené níže.</p>
         <hr />
         <div className="markdown" dangerouslySetInnerHTML={{ __html: currentHtml }} />
